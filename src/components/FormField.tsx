@@ -1,0 +1,111 @@
+import React from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TextInputProps,
+  StyleSheet,
+  ViewStyle,
+  TextStyle,
+} from 'react-native';
+import { colors } from '../theme/colors';
+import { spacing, radii } from '../theme/spacing';
+import { typography } from '../theme/typography';
+
+export interface FormFieldProps extends TextInputProps {
+  label: string;
+  error?: string;
+  helperText?: string;
+  containerStyle?: ViewStyle;
+  inputStyle?: TextStyle;
+  prefix?: React.ReactNode;
+  suffix?: React.ReactNode;
+}
+
+export function FormField({
+  label,
+  error,
+  helperText,
+  containerStyle,
+  inputStyle,
+  prefix,
+  suffix,
+  ...inputProps
+}: FormFieldProps) {
+  const [isFocused, setIsFocused] = React.useState(false);
+
+  return (
+    <View style={[styles.container, containerStyle]}>
+      <Text style={styles.label}>{label}</Text>
+
+      <View
+        style={[
+          styles.inputContainer,
+          isFocused && styles.inputFocused,
+          error ? styles.inputError : undefined,
+        ]}
+      >
+        {prefix}
+        <TextInput
+          style={[styles.input, inputStyle]}
+          placeholderTextColor={colors.textMuted}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          {...inputProps}
+        />
+        {suffix}
+      </View>
+
+      {error ? (
+        <Text style={styles.errorText}>{error}</Text>
+      ) : helperText ? (
+        <Text style={styles.helperText}>{helperText}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    marginBottom: spacing.lg,
+  },
+  label: {
+    ...typography.bodySmall,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    minHeight: 48,
+  },
+  inputFocused: {
+    borderColor: colors.primary,
+  },
+  inputError: {
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerLight,
+  },
+  input: {
+    flex: 1,
+    ...typography.body,
+    paddingVertical: spacing.sm,
+    color: colors.textPrimary,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.danger,
+    marginTop: spacing.xs,
+  },
+  helperText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+  },
+});
