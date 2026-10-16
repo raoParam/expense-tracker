@@ -7,6 +7,7 @@ import { errorHandler } from '../src/middleware/errorHandler';
 // Mock firebase-admin auth
 jest.mock('firebase-admin', () => {
   const verifyIdTokenMock = jest.fn();
+  const getUserMock = jest.fn();
   return {
     apps: [{}],
     initializeApp: jest.fn(),
@@ -15,8 +16,10 @@ jest.mock('firebase-admin', () => {
     },
     auth: () => ({
       verifyIdToken: verifyIdTokenMock,
+      getUser: getUserMock,
     }),
     __mockVerifyIdToken: verifyIdTokenMock,
+    __mockGetUser: getUserMock,
   };
 });
 
@@ -89,6 +92,54 @@ describe('Authentication Middleware (requireAuth)', () => {
       uid: 'user_firebase_123',
       email: 'student@hostel.edu',
       displayName: 'Rohan Sharma',
+    });
+  });
+
+  test('retrieves display name from Firebase Admin getUser when token has no name claim (stale token)', async () => {
+    const mockDecodedTokenWithoutName = {
+      uid: 'user_stale_123',
+      email: 'rohan@hostel.edu',
+      // name is missing/undefined in stale token
+    };
+
+    mockAdmin.__mockVerifyIdToken.mockResolvedValueOnce(mockDecodedTokenWithoutName);
+    mockAdmin.__mockGetUser.mockResolvedValueOnce({
+      uid: 'user_stale_123',
+      displayName: 'Rohan Sharma',
+      email: 'rohan@hostel.edu',
+    });
+
+    const res = await request(app)
+      .get('/protected')
+      .set('Authorization', 'Bearer stale-firebase-id-token');
+
+    expect(res.status).toBe(200);
+    expect(mockAdmin.__mockGetUser).toHaveBeenCalledWith('user_stale_123');
+    expect(res.body.user).toEqual({
+      uid: 'user_stale_123',
+      email: 'rohan@hostel.edu',
+      displayName: 'Rohan Sharma',
+    });
+  });
+
+  test('handles getUser lookup failure gracefully when token has no name claim', async () => {
+    const mockDecodedTokenWithoutName = {
+      uid: 'user_stale_456',
+      email: 'someone@hostel.edu',
+    };
+
+    mockAdmin.__mockVerifyIdToken.mockResolvedValueOnce(mockDecodedTokenWithoutName);
+    mockAdmin.__mockGetUser.mockRejectedValueOnce(new Error('User not found in Firebase'));
+
+    const res = await request(app)
+      .get('/protected')
+      .set('Authorization', 'Bearer stale-firebase-id-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.user).toEqual({
+      uid: 'user_stale_456',
+      email: 'someone@hostel.edu',
+      displayName: undefined,
     });
   });
 });

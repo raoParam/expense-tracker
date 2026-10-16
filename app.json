@@ -5,11 +5,13 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F172A"
       },
       "package": "com.hostelexpense.app",
@@ -18,10 +20,26 @@
     "web": {
       "bundler": "metro"
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/db8a6444-9fc6-4cf4-9e62-73b8d4493c75",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "plugins": [
       "expo-router",
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-updates"
     ],
-    "scheme": "spendly"
+    "scheme": "spendly",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "db8a6444-9fc6-4cf4-9e62-73b8d4493c75"
+      }
+    },
+    "owner": "raoparam"
   }
 }

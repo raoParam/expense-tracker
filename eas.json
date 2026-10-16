@@ -5,18 +5,25 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
+      "channel": "preview",
       "android": {
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://10.0.2.2:5000/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://expense-tracker-3uoa.onrender.com/api/v1",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "spendly-70334.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "spendly-70334",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "spendly-70334.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "611512645832"
       }
     },
     "production": {
+      "channel": "production",
       "android": {
         "buildType": "app-bundle"
       }

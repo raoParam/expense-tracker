@@ -49,10 +49,23 @@ export async function requireAuth(
 
   try {
     const decodedToken = await admin.auth().verifyIdToken(token);
+    let displayName = decodedToken.name;
+
+    if (!displayName) {
+      try {
+        const userRecord = await admin.auth().getUser(decodedToken.uid);
+        if (userRecord && userRecord.displayName) {
+          displayName = userRecord.displayName;
+        }
+      } catch (userErr: any) {
+        console.warn('[Auth Middleware] Could not fetch user profile from Firebase Admin:', userErr?.message);
+      }
+    }
+
     req.user = {
       uid: decodedToken.uid,
       email: decodedToken.email,
-      displayName: decodedToken.name,
+      displayName,
     };
     next();
   } catch (error: any) {

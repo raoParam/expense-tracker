@@ -112,7 +112,7 @@ router.post(
  */
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const rooms = await RoomService.listUserRooms(req.user!.uid);
+    const rooms = await RoomService.listUserRooms(req.user!.uid, req.user);
     res.status(200).json({
       count: rooms.length,
       rooms,
@@ -128,7 +128,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 router.get('/:roomId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const roomId = Array.isArray(req.params.roomId) ? req.params.roomId[0] : req.params.roomId;
-    const room = await RoomService.getRoomById(roomId, req.user!.uid);
+    const room = await RoomService.getRoomById(roomId, req.user!.uid, req.user);
     res.status(200).json({
       room,
     });

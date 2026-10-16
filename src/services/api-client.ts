@@ -40,8 +40,9 @@ export function getApiBaseUrl(): string {
 
   if (!isDev) {
     console.warn(
-      '[Spendly API Warning] Standalone release build without EXPO_PUBLIC_API_URL set. Defaulting to localhost will cause network failures on physical devices. Set EXPO_PUBLIC_API_URL to your production server URL.'
+      '[Spendly API Warning] Standalone release build without explicit EXPO_PUBLIC_API_URL set. Falling back to production backend endpoint.'
     );
+    return 'https://expense-tracker-3uoa.onrender.com/api/v1';
   }
 
   return 'http://localhost:5000/api/v1';

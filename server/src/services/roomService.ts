@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import mongoose from 'mongoose';
+import admin from 'firebase-admin';
 import { Room, IRoom } from '../models/Room';
 import { Invitation, IInvitation } from '../models/Invitation';
 import { Expense } from '../models/Expense';
@@ -21,6 +22,55 @@ export function generateInviteCode(): string {
 
 export class RoomService {
   /**
+   * Repairs room members whose displayName is literally 'Member' or 'Admin' (or empty)
+   * if a verified real display name exists for their Firebase user.
+   * Preserves all other member attributes, expense records, roles, acknowledgements, and balances.
+   * Does not overwrite legitimate custom names.
+   */
+  static async repairMemberDisplayNames(
+    room: IRoom,
+    currentUser?: AuthenticatedUser
+  ): Promise<boolean> {
+    let modified = false;
+
+    for (const member of room.members) {
+      const isPlaceholder =
+        !member.displayName ||
+        member.displayName.trim() === '' ||
+        member.displayName === 'Member' ||
+        member.displayName === 'Admin';
+
+      if (!isPlaceholder) {
+        continue;
+      }
+
+      // 1. If this member is the authenticated caller and has a real name:
+      if (currentUser && currentUser.uid === member.userId && currentUser.displayName && currentUser.displayName.trim() !== '') {
+        member.displayName = currentUser.displayName.trim();
+        modified = true;
+        continue;
+      }
+
+      // 2. Look up user record from Firebase Admin
+      try {
+        const userRecord = await admin.auth().getUser(member.userId);
+        if (userRecord && userRecord.displayName && userRecord.displayName.trim() !== '') {
+          member.displayName = userRecord.displayName.trim();
+          modified = true;
+        }
+      } catch (err: any) {
+        // Non-fatal: if lookup fails (e.g. mock in tests or offline), preserve existing
+      }
+    }
+
+    if (modified) {
+      await room.save();
+    }
+
+    return modified;
+  }
+
+  /**
    * Create a new room with the authenticated user as admin and first active member.
    */
   static async createRoom(
@@ -32,6 +82,18 @@ export class RoomService {
       throw new AppError('Room name must be between 1 and 50 characters', 400, 'INVALID_NAME');
     }
 
+    let creatorDisplayName = creator.displayName;
+    if (!creatorDisplayName || creatorDisplayName.trim() === '' || creatorDisplayName === 'Admin') {
+      try {
+        const userRecord = await admin.auth().getUser(creator.uid);
+        if (userRecord && userRecord.displayName && userRecord.displayName.trim() !== '') {
+          creatorDisplayName = userRecord.displayName.trim();
+        }
+      } catch (e) {
+        // fallback to creator.displayName or 'Admin'
+      }
+    }
+
     const room = new Room({
       name: trimmedName,
       description: data.description?.trim(),
@@ -39,7 +101,7 @@ export class RoomService {
       members: [
         {
           userId: creator.uid,
-          displayName: creator.displayName || 'Admin',
+          displayName: creatorDisplayName || 'Admin',
           email: creator.email,
           role: 'admin',
           joinedAt: new Date(),
@@ -66,17 +128,23 @@ export class RoomService {
   /**
    * List all active/authorized rooms for a given user.
    */
-  static async listUserRooms(userId: string): Promise<IRoom[]> {
-    return Room.find({
+  static async listUserRooms(userId: string, currentUser?: AuthenticatedUser): Promise<IRoom[]> {
+    const rooms = await Room.find({
       'members.userId': userId,
       'members.status': 'active',
     }).sort({ updatedAt: -1 });
+
+    for (const room of rooms) {
+      await RoomService.repairMemberDisplayNames(room, currentUser);
+    }
+
+    return rooms;
   }
 
   /**
    * Fetch a room by ID if the user is an active member or admin.
    */
-  static async getRoomById(roomId: string, userId: string): Promise<IRoom> {
+  static async getRoomById(roomId: string, userId: string, currentUser?: AuthenticatedUser): Promise<IRoom> {
     if (!mongoose.Types.ObjectId.isValid(roomId)) {
       throw new AppError('Invalid room ID format', 400, 'INVALID_ID');
     }
@@ -93,6 +161,9 @@ export class RoomService {
     if (!isMember) {
       throw new AppError('You are not authorized to access this room', 403, 'FORBIDDEN');
     }
+
+    // Repair placeholder display names if real names can be verified
+    await RoomService.repairMemberDisplayNames(room, currentUser);
 
     return room;
   }
@@ -269,22 +340,46 @@ export class RoomService {
       throw new AppError('Cannot join an archived room', 400, 'ROOM_ARCHIVED');
     }
 
+    let userDisplayName = user.displayName;
+    if (!userDisplayName || userDisplayName.trim() === '' || userDisplayName === 'Member') {
+      try {
+        const userRecord = await admin.auth().getUser(user.uid);
+        if (userRecord && userRecord.displayName && userRecord.displayName.trim() !== '') {
+          userDisplayName = userRecord.displayName.trim();
+        }
+      } catch (e) {
+        // fallback to user.displayName or 'Member'
+      }
+    }
+
     const existingMember = room.members.find((m) => m.userId === user.uid);
 
     if (existingMember) {
       if (existingMember.status === 'active') {
-        // Already active member
+        // Already active member: repair display name if placeholder
+        if (
+          (!existingMember.displayName ||
+            existingMember.displayName === 'Member' ||
+            existingMember.displayName === 'Admin') &&
+          userDisplayName
+        ) {
+          existingMember.displayName = userDisplayName;
+          await room.save();
+        }
+        await RoomService.repairMemberDisplayNames(room, user);
         return room;
       }
       // Re-activating previously removed member
       existingMember.status = 'active';
       existingMember.joinedAt = new Date();
-      existingMember.displayName = user.displayName || existingMember.displayName;
+      if (userDisplayName) {
+        existingMember.displayName = userDisplayName;
+      }
     } else {
       // Adding new member
       room.members.push({
         userId: user.uid,
-        displayName: user.displayName || 'Member',
+        displayName: userDisplayName || 'Member',
         email: user.email,
         role: 'member',
         joinedAt: new Date(),
@@ -292,6 +387,7 @@ export class RoomService {
       });
     }
 
+    await RoomService.repairMemberDisplayNames(room, user);
     await room.save();
 
     // Mark invitation as accepted

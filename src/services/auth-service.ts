@@ -6,7 +6,7 @@ import {
   onAuthStateChanged,
   User,
 } from 'firebase/auth';
-import { auth } from './firebase';
+import { auth, firebaseConfigError } from './firebase';
 
 export interface UserProfile {
   uid: string;
@@ -19,6 +19,9 @@ export async function registerWithEmail(
   password: string,
   displayName?: string
 ): Promise<UserProfile> {
+  if (!auth) {
+    throw new Error(firebaseConfigError || 'Firebase Authentication is not configured.');
+  }
   const userCredential = await createUserWithEmailAndPassword(
     auth,
     email.trim(),
@@ -29,6 +32,8 @@ export async function registerWithEmail(
     await updateProfile(userCredential.user, {
       displayName: displayName.trim(),
     });
+    // Force refresh token so the newly set displayName is immediately included in the JWT claims
+    await userCredential.user.getIdToken(true);
   }
 
   return {
@@ -42,6 +47,9 @@ export async function loginWithEmail(
   email: string,
   password: string
 ): Promise<UserProfile> {
+  if (!auth) {
+    throw new Error(firebaseConfigError || 'Firebase Authentication is not configured.');
+  }
   const userCredential = await signInWithEmailAndPassword(
     auth,
     email.trim(),
@@ -56,16 +64,19 @@ export async function loginWithEmail(
 }
 
 export async function logoutUser(): Promise<void> {
+  if (!auth) return;
   await signOut(auth);
 }
 
 export async function getCurrentUserToken(forceRefresh = false): Promise<string | null> {
+  if (!auth) return null;
   const user = auth.currentUser;
   if (!user) return null;
   return user.getIdToken(forceRefresh);
 }
 
 export function getCurrentUser(): UserProfile | null {
+  if (!auth) return null;
   const user = auth.currentUser;
   if (!user) return null;
   return {
@@ -78,6 +89,10 @@ export function getCurrentUser(): UserProfile | null {
 export function subscribeToAuthChanges(
   callback: (user: UserProfile | null) => void
 ): () => void {
+  if (!auth) {
+    callback(null);
+    return () => {};
+  }
   return onAuthStateChanged(auth, (user: User | null) => {
     if (user) {
       callback({

@@ -6,12 +6,20 @@ import { DB_NAME } from '../src/db/schema';
 import { migrateDbIfNeeded } from '../src/db/client';
 import { colors } from '../src/theme/colors';
 import { AuthProvider } from '../src/context/AuthContext';
+import { isFirebaseConfigured, firebaseConfigError } from '../src/services/firebase';
+import { ConfigurationDiagnosticScreen } from '../src/components/ConfigurationDiagnosticScreen';
+import { UpdateNotification } from '../src/components/UpdateNotification';
 
 export default function RootLayout() {
+  if (!isFirebaseConfigured) {
+    return <ConfigurationDiagnosticScreen message={firebaseConfigError} />;
+  }
+
   return (
     <AuthProvider>
       <SQLiteProvider databaseName={DB_NAME} onInit={migrateDbIfNeeded}>
         <StatusBar style="dark" />
+        <UpdateNotification />
         <Stack
           screenOptions={{
             headerStyle: {
