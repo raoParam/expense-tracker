@@ -80,13 +80,6 @@ export default function HomeScreen() {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
       }
     >
-      {/* Local Storage Disclosure Notice */}
-      <View style={styles.noticeBanner}>
-        <Ionicons name="shield-checkmark-outline" size={18} color={colors.infoText} />
-        <Text style={styles.noticeText}>
-          Personal expenses are stored privately on this device.
-        </Text>
-      </View>
 
       {/* Current Month Spending Summary */}
       <SummaryCard
@@ -176,22 +169,6 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.lg,
     paddingBottom: spacing.xxxl,
-  },
-  noticeBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.infoLight,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
-    marginBottom: spacing.md,
-    gap: spacing.xs,
-  },
-  noticeText: {
-    ...typography.caption,
-    color: colors.infoText,
-    flex: 1,
-    fontWeight: '500',
   },
   actionRow: {
     flexDirection: 'row',
