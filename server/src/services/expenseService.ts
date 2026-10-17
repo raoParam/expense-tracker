@@ -5,6 +5,7 @@ import { UserRestriction } from '../models/UserRestriction';
 import { AuditEvent } from '../models/AuditEvent';
 import { AppError } from '../middleware/errorHandler';
 import { calculateShares, SplitInputItem } from './splitCalculator';
+import { PushNotificationService } from './pushNotificationService';
 
 export interface CreateExpenseDTO {
   roomId: string;
@@ -149,6 +150,12 @@ export const ExpenseService = {
         splitType: expense.splitType,
         participantCount: expense.participants.length,
       },
+    });
+
+    // 9. Dispatch push notifications to other participants
+    const payerName = callerMember?.displayName || 'A roommate';
+    PushNotificationService.notifyExpenseCreated(expense, room.name, payerName).catch((err) => {
+      console.error('[ExpenseService] Error triggering push for expense created:', err);
     });
 
     return expense;
@@ -316,6 +323,18 @@ export const ExpenseService = {
             allAcknowledged: true,
           },
         });
+
+        // Trigger push notification to payer that expense confirmed
+        Room.findById(confirmedExpense.roomId)
+          .then((r) => {
+            if (r) {
+              return PushNotificationService.notifyExpenseConfirmed(confirmedExpense, r.name);
+            }
+          })
+          .catch((err) => {
+            console.error('[ExpenseService] Error triggering push for expense confirmed:', err);
+          });
+
         return confirmedExpense;
       }
     }
@@ -467,6 +486,25 @@ export const ExpenseService = {
           },
         });
 
+        // Push notification: Unanimous rejection
+        Room.findById(updatedExpense.roomId)
+          .then((r) => {
+            if (r) {
+              const rejector = r.members.find((m) => m.userId === callerId);
+              return PushNotificationService.notifyExpenseRejected(
+                unanimouslyRejected,
+                callerId,
+                rejector?.displayName || 'Roommate',
+                cleanReason,
+                r.name,
+                true
+              );
+            }
+          })
+          .catch((err) => {
+            console.error('[ExpenseService] Error triggering push for unanimous rejection:', err);
+          });
+
         return unanimouslyRejected;
       }
     }
@@ -483,6 +521,25 @@ export const ExpenseService = {
         reason: cleanReason,
       },
     });
+
+    // Push notification: Partial rejection
+    Room.findById(updatedExpense.roomId)
+      .then((r) => {
+        if (r) {
+          const rejector = r.members.find((m) => m.userId === callerId);
+          return PushNotificationService.notifyExpenseRejected(
+            updatedExpense,
+            callerId,
+            rejector?.displayName || 'Roommate',
+            cleanReason,
+            r.name,
+            false
+          );
+        }
+      })
+      .catch((err) => {
+        console.error('[ExpenseService] Error triggering push for partial rejection:', err);
+      });
 
     return updatedExpense;
   },
@@ -611,6 +668,16 @@ export const ExpenseService = {
         newRevision: updated.revision,
         amountPaise: updated.amountPaise,
       },
+    });
+
+    // Push notification: Resubmitted expense requires fresh acknowledgement
+    const payerMember = room.members.find((m) => m.userId === callerId);
+    PushNotificationService.notifyExpenseResubmitted(
+      updated,
+      room.name,
+      payerMember?.displayName || 'A roommate'
+    ).catch((err) => {
+      console.error('[ExpenseService] Error triggering push for expense resubmitted:', err);
     });
 
     return updated;

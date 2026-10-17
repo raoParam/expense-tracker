@@ -30,3 +30,5 @@ server/.env*
 # OS
 .DS_Store
 Thumbs.db
+firebase-credentials.json
+e-credentials.json

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
@@ -9,12 +9,26 @@ import { ConfirmationDialog } from '../../src/components/ConfirmationDialog';
 import { colors } from '../../src/theme/colors';
 import { spacing, radii } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
+import { NotificationService } from '../../src/services/notification-service';
 
 export default function AboutScreen() {
   const router = useRouter();
   const { user, logout } = useAuth();
   const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkNotificationStatus = async () => {
+      try {
+        const status = await NotificationService.getPermissionStatus();
+        setNotificationsEnabled(status.granted || status.status === 'granted');
+      } catch {
+        setNotificationsEnabled(false);
+      }
+    };
+    checkNotificationStatus();
+  }, []);
 
   const handleConfirmLogout = async () => {
     setLoggingOut(true);
@@ -85,6 +99,58 @@ export default function AboutScreen() {
               />
             </View>
           )}
+        </Card>
+      </View>
+
+      {/* Push Notifications Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Push Notifications</Text>
+        <Card style={styles.infoCard}>
+          <View style={styles.notifRow}>
+            <View style={styles.notifIconCircle}>
+              <Ionicons
+                name={notificationsEnabled ? 'notifications' : 'notifications-off-outline'}
+                size={22}
+                color={notificationsEnabled ? colors.primary : colors.textMuted}
+              />
+            </View>
+            <View style={styles.notifTextCol}>
+              <View style={styles.notifStatusBadgeRow}>
+                <Text style={styles.notifTitle}>Expense Alerts</Text>
+                <View
+                  style={[
+                    styles.statusPill,
+                    notificationsEnabled ? styles.statusPillActive : styles.statusPillInactive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusPillText,
+                      notificationsEnabled ? styles.statusPillTextActive : styles.statusPillTextInactive,
+                    ]}
+                  >
+                    {notificationsEnabled === null
+                      ? 'Checking...'
+                      : notificationsEnabled
+                      ? 'Enabled'
+                      : 'Disabled'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.notifDesc}>
+                {notificationsEnabled
+                  ? 'Real-time alerts for expense reviews, repayments, and rejections.'
+                  : 'Notifications are currently disabled. You can enable them in Android settings.'}
+              </Text>
+            </View>
+          </View>
+
+          <Button
+            title={notificationsEnabled ? 'Notification Settings' : 'Enable in Android Settings'}
+            variant="outline"
+            onPress={() => NotificationService.openNotificationSettings()}
+            style={styles.notifBtn}
+          />
         </Card>
       </View>
 
@@ -345,5 +411,64 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  notifRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  notifIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  notifTextCol: {
+    flex: 1,
+  },
+  notifStatusBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  notifTitle: {
+    ...typography.bodyMedium,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  statusPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.full,
+  },
+  statusPillActive: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusPillInactive: {
+    backgroundColor: '#F1F5F9',
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  statusPillTextActive: {
+    color: '#15803D',
+  },
+  statusPillTextInactive: {
+    color: '#64748B',
+  },
+  notifDesc: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  notifBtn: {
+    marginTop: spacing.xs,
+    width: '100%',
   },
 });

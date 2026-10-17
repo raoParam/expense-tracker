@@ -8,6 +8,7 @@ import { Settlement } from '../models/Settlement';
 import { AuditEvent } from '../models/AuditEvent';
 import { AuthenticatedUser } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
+import { PushNotificationService } from './pushNotificationService';
 
 // Generate a human-friendly 6-character uppercase alphanumeric code
 export function generateInviteCode(): string {
@@ -404,6 +405,17 @@ export class RoomService {
       metadata: { inviteCode, userId: user.uid },
     });
 
+    // Push notification: Member joined room -> notify admin
+    PushNotificationService.notifyMemberJoined(
+      room._id.toString(),
+      room.name,
+      room.adminId,
+      userDisplayName || user.displayName || 'A new member',
+      user.uid
+    ).catch((err) => {
+      console.error('[RoomService] Error triggering push for member joined:', err);
+    });
+
     return room;
   }
 
@@ -491,6 +503,15 @@ export class RoomService {
       entityType: 'membership',
       action: 'MEMBER_REMOVED',
       metadata: { removedUserId: memberUserIdToRemove, reason },
+    });
+
+    // Push notification: Member removed -> notify removed member
+    PushNotificationService.notifyMemberRemoved(
+      room._id.toString(),
+      room.name,
+      memberUserIdToRemove
+    ).catch((err) => {
+      console.error('[RoomService] Error triggering push for member removed:', err);
     });
 
     return room;

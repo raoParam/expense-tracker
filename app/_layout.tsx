@@ -9,6 +9,95 @@ import { AuthProvider } from '../src/context/AuthContext';
 import { isFirebaseConfigured, firebaseConfigError } from '../src/services/firebase';
 import { ConfigurationDiagnosticScreen } from '../src/components/ConfigurationDiagnosticScreen';
 import { UpdateNotification } from '../src/components/UpdateNotification';
+import { NotificationPermissionModal } from '../src/components/NotificationPermissionModal';
+import { NotificationService } from '../src/services/notification-service';
+import * as Notifications from 'expo-notifications';
+import { useRouter } from 'expo-router';
+import { useAuth } from '../src/context/AuthContext';
+
+function NotificationManager() {
+  const { user } = useAuth();
+  const router = useRouter();
+  const [showPermissionModal, setShowPermissionModal] = React.useState(false);
+  const [requestingPermission, setRequestingPermission] = React.useState(false);
+
+  React.useEffect(() => {
+    // 1. Configure Android Notification Channel
+    NotificationService.configureChannel();
+
+    // 2. Check if we should prompt user for permission
+    NotificationService.shouldPromptUser().then((shouldPrompt) => {
+      if (shouldPrompt) {
+        setShowPermissionModal(true);
+      }
+    });
+
+    // 3. Handle cold start notification tap (when app was closed)
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response) {
+        const target = NotificationService.resolveNavigationTarget(
+          response.notification.request.content.data
+        );
+        if (target) {
+          router.push(target.route as any);
+        }
+      }
+    });
+
+    // 4. Handle foreground/background notification tap
+    const responseListener = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const target = NotificationService.resolveNavigationTarget(
+          response.notification.request.content.data
+        );
+        if (target) {
+          router.push(target.route as any);
+        }
+      }
+    );
+
+    // 5. Handle token refresh
+    const tokenListener = Notifications.addPushTokenListener(async (tokenData) => {
+      if (user?.uid && tokenData.data) {
+        await NotificationService.registerTokenWithBackend(tokenData.data);
+      }
+    });
+
+    return () => {
+      responseListener.remove();
+      tokenListener.remove();
+    };
+  }, []);
+
+  // Sync token whenever auth state changes (login, logout, switch user)
+  React.useEffect(() => {
+    NotificationService.syncAuthUserState(user?.uid || null);
+  }, [user?.uid]);
+
+  const handleEnablePermission = async () => {
+    setRequestingPermission(true);
+    try {
+      await NotificationService.requestPermissionAndRegister(user?.uid);
+    } finally {
+      setRequestingPermission(false);
+      setShowPermissionModal(false);
+    }
+  };
+
+  const handleDismissPermission = async () => {
+    await NotificationService.markPromptCompleted();
+    setShowPermissionModal(false);
+  };
+
+  return (
+    <NotificationPermissionModal
+      visible={showPermissionModal}
+      onEnable={handleEnablePermission}
+      onDismiss={handleDismissPermission}
+      loading={requestingPermission}
+    />
+  );
+}
 
 export default function RootLayout() {
   if (!isFirebaseConfigured) {
@@ -20,6 +109,7 @@ export default function RootLayout() {
       <SQLiteProvider databaseName={DB_NAME} onInit={migrateDbIfNeeded}>
         <StatusBar style="dark" />
         <UpdateNotification />
+        <NotificationManager />
         <Stack
           screenOptions={{
             headerStyle: {

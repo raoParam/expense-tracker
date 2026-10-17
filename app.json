@@ -31,7 +31,14 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
-      "expo-updates"
+      "expo-updates",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#0F172A"
+        }
+      ]
     ],
     "scheme": "spendly",
     "extra": {

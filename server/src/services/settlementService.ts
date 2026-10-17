@@ -4,6 +4,7 @@ import { Room } from '../models/Room';
 import { AuditEvent } from '../models/AuditEvent';
 import { BalanceService } from './balanceService';
 import { AppError } from '../middleware/errorHandler';
+import { PushNotificationService } from './pushNotificationService';
 
 export interface CreateSettlementInput {
   receiverId: string;
@@ -136,6 +137,16 @@ export const SettlementService = {
       },
     });
 
+    // Push notification: Repayment verification requested
+    const debtorMember = room.members.find((m) => m.userId === callerId);
+    PushNotificationService.notifySettlementRequested(
+      settlement,
+      room.name,
+      debtorMember?.displayName || 'A member'
+    ).catch((err) => {
+      console.error('[SettlementService] Error triggering push for settlement requested:', err);
+    });
+
     return settlement;
   },
 
@@ -262,6 +273,22 @@ export const SettlementService = {
       },
     });
 
+    // Push notification: Repayment verified
+    Room.findById(updatedSettlement.roomId)
+      .then((r) => {
+        if (r) {
+          const receiver = r.members.find((m) => m.userId === callerId);
+          return PushNotificationService.notifySettlementVerified(
+            updatedSettlement,
+            r.name,
+            receiver?.displayName || 'The recipient'
+          );
+        }
+      })
+      .catch((err) => {
+        console.error('[SettlementService] Error triggering push for settlement verified:', err);
+      });
+
     return updatedSettlement;
   },
 
@@ -340,6 +367,23 @@ export const SettlementService = {
       },
     });
 
+    // Push notification: Repayment rejected
+    Room.findById(updatedSettlement.roomId)
+      .then((r) => {
+        if (r) {
+          const receiver = r.members.find((m) => m.userId === callerId);
+          return PushNotificationService.notifySettlementRejected(
+            updatedSettlement,
+            r.name,
+            receiver?.displayName || 'The recipient',
+            updatedSettlement.rejectionReason
+          );
+        }
+      })
+      .catch((err) => {
+        console.error('[SettlementService] Error triggering push for settlement rejected:', err);
+      });
+
     return updatedSettlement;
   },
 
@@ -403,6 +447,22 @@ export const SettlementService = {
         amountPaise: updatedSettlement.amountPaise,
       },
     });
+
+    // Push notification: Repayment cancelled
+    Room.findById(updatedSettlement.roomId)
+      .then((r) => {
+        if (r) {
+          const debtor = r.members.find((m) => m.userId === callerId);
+          return PushNotificationService.notifySettlementCancelled(
+            updatedSettlement,
+            r.name,
+            debtor?.displayName || 'The debtor'
+          );
+        }
+      })
+      .catch((err) => {
+        console.error('[SettlementService] Error triggering push for settlement cancelled:', err);
+      });
 
     return updatedSettlement;
   },

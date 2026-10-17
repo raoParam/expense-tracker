@@ -1,6 +1,7 @@
 import { createApp } from './app';
 import { config } from './config/env';
 import { connectDatabase } from './config/db';
+import { PushNotificationService } from './services/pushNotificationService';
 
 async function bootstrap() {
   const app = createApp();
@@ -13,9 +14,13 @@ async function bootstrap() {
     console.log(`[Server] Local health check: http://localhost:${config.port}/api/v1/health`);
   });
 
+  // Start bounded, in-process push receipt worker on Render
+  const receiptWorker = PushNotificationService.startPeriodicReceiptWorker();
+
   // Graceful shutdown handling
   const shutdown = async () => {
     console.log('[Server] Shutting down gracefully...');
+    if (receiptWorker) clearInterval(receiptWorker);
     server.close(() => {
       console.log('[Server] HTTP server closed.');
       process.exit(0);

@@ -8,6 +8,7 @@ import {
   getCurrentUserToken,
   getCurrentUser,
 } from '../services/auth-service';
+import { NotificationService } from '../services/notification-service';
 
 export interface AuthContextType {
   user: UserProfile | null;
@@ -21,6 +22,25 @@ export interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+/**
+ * Executes logout sequence ensuring push token is unregistered before Firebase session is cleared.
+ * Safe against network failures or offline state so logout is never blocked.
+ */
+export async function handleLogoutSequence(
+  unregisterFn = () => NotificationService.unregisterTokenFromBackend(),
+  signOutFn = () => logoutUser()
+): Promise<void> {
+  try {
+    await unregisterFn();
+  } catch (notifErr: any) {
+    console.warn(
+      '[AuthContext] Failed to unregister device push token before logout:',
+      notifErr?.message
+    );
+  }
+  await signOutFn();
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(getCurrentUser());
@@ -69,7 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     setError(null);
     try {
-      await logoutUser();
+      await handleLogoutSequence();
       setUser(null);
     } catch (err: any) {
       setError(err?.message || 'Failed to logout.');

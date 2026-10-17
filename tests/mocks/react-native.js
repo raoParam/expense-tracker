@@ -9,4 +9,7 @@ module.exports = {
   Alert: {
     alert: jest.fn(),
   },
+  Linking: {
+    openSettings: jest.fn().mockResolvedValue(true),
+  },
 };
