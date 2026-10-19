@@ -3,6 +3,7 @@ import { Expense } from '../models/Expense';
 import { Settlement } from '../models/Settlement';
 import { Room } from '../models/Room';
 import { AppError } from '../middleware/errorHandler';
+import { calculateRoomAccounting, getSignedBilateralDebt } from './roomAccounting';
 
 export interface MemberBalance {
   userId: string;
@@ -101,50 +102,13 @@ export const BalanceService = {
       }
     }
 
-    // Initialize balance records
-    const paidMap = new Map<string, number>();
-    const shareMap = new Map<string, number>();
-
-    for (const userId of memberMap.keys()) {
-      paidMap.set(userId, 0);
-      shareMap.set(userId, 0);
-    }
-
-    // Aggregate confirmed expenses
-    for (const exp of confirmedExpenses) {
-      paidMap.set(exp.payerId, (paidMap.get(exp.payerId) || 0) + exp.amountPaise);
-      for (const p of exp.participants) {
-        shareMap.set(p.userId, (shareMap.get(p.userId) || 0) + p.sharePaise);
-      }
-    }
-
-    // Aggregate verified settlements
-    // Debtor paid settlement -> increases debtor balance towards zero (adds to total paid)
-    // Receiver received settlement -> decreases receiver receivable towards zero (adds to total share)
-    for (const st of verifiedSettlements) {
-      paidMap.set(st.debtorId, (paidMap.get(st.debtorId) || 0) + st.amountPaise);
-      shareMap.set(st.receiverId, (shareMap.get(st.receiverId) || 0) + st.amountPaise);
-    }
-
-    // Compute net balance: balance[u] = Paid[u] - Share[u]
-    const balances: MemberBalance[] = [];
-    let sumNetBalances = 0;
-
-    for (const [userId, meta] of memberMap.entries()) {
-      const totalPaid = paidMap.get(userId) || 0;
-      const totalShare = shareMap.get(userId) || 0;
-      const netBalancePaise = totalPaid - totalShare;
-      sumNetBalances += netBalancePaise;
-
-      balances.push({
-        userId,
-        displayName: meta.displayName,
-        email: meta.email,
-        netBalancePaise,
-        totalPaidPaise: totalPaid,
-        totalSharePaise: totalShare,
-      });
-    }
+    const accounting = calculateRoomAccounting(
+      confirmedExpenses,
+      verifiedSettlements,
+      Array.from(memberMap.entries()).map(([userId, meta]) => ({ userId, ...meta }))
+    );
+    const balances: MemberBalance[] = accounting.balances;
+    const sumNetBalances = balances.reduce((sum, balance) => sum + balance.netBalancePaise, 0);
 
     // Invariant: Conservation of money (sum of all net balances must equal 0)
     if (sumNetBalances !== 0) {
@@ -177,37 +141,11 @@ export const BalanceService = {
       Settlement.find({ roomId, status: 'verified' }),
     ]);
 
-    let aOwesB = 0;
-    let bOwesA = 0;
-
-    for (const exp of confirmedExpenses) {
-      if (exp.payerId === receiverId) {
-        const participantA = exp.participants.find((p) => p.userId === debtorId);
-        if (participantA) {
-          aOwesB += participantA.sharePaise;
-        }
-      }
-      if (exp.payerId === debtorId) {
-        const participantB = exp.participants.find((p) => p.userId === receiverId);
-        if (participantB) {
-          bOwesA += participantB.sharePaise;
-        }
-      }
-    }
-
-    for (const st of verifiedSettlements) {
-      if (st.debtorId === debtorId && st.receiverId === receiverId) {
-        // A paid B -> reduces A's debt to B
-        aOwesB -= st.amountPaise;
-      }
-      if (st.debtorId === receiverId && st.receiverId === debtorId) {
-        // B paid A -> reduces B's debt to A
-        bOwesA -= st.amountPaise;
-      }
-    }
-
-    const netBilateralDebt = aOwesB - bOwesA;
-    return netBilateralDebt;
+    return getSignedBilateralDebt(
+      calculateRoomAccounting(confirmedExpenses, verifiedSettlements),
+      debtorId,
+      receiverId
+    );
   },
 
   /**
@@ -239,6 +177,7 @@ export const BalanceService = {
       memberNameMap.set(m.userId, m.displayName);
     }
 
+    const accounting = calculateRoomAccounting(confirmedExpenses, verifiedSettlements, activeMembers);
     const debts: BilateralDebtInfo[] = [];
 
     for (let i = 0; i < activeMembers.length; i++) {
@@ -246,30 +185,7 @@ export const BalanceService = {
         const userA = activeMembers[i].userId;
         const userB = activeMembers[j].userId;
 
-        let aOwesB = 0;
-        let bOwesA = 0;
-
-        for (const exp of confirmedExpenses) {
-          if (exp.payerId === userB) {
-            const pA = exp.participants.find((p) => p.userId === userA);
-            if (pA) aOwesB += pA.sharePaise;
-          }
-          if (exp.payerId === userA) {
-            const pB = exp.participants.find((p) => p.userId === userB);
-            if (pB) bOwesA += pB.sharePaise;
-          }
-        }
-
-        for (const st of verifiedSettlements) {
-          if (st.debtorId === userA && st.receiverId === userB) {
-            aOwesB -= st.amountPaise;
-          }
-          if (st.debtorId === userB && st.receiverId === userA) {
-            bOwesA -= st.amountPaise;
-          }
-        }
-
-        const netAtoB = aOwesB - bOwesA;
+        const netAtoB = getSignedBilateralDebt(accounting, userA, userB);
         if (netAtoB > 0) {
           debts.push({
             debtorId: userA,

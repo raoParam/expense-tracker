@@ -229,9 +229,12 @@ export const SettlementService = {
       settlement.receiverId
     );
 
-    if (currentDebt < settlement.amountPaise) {
+    // V1 settlements are atomic full bilateral repayments. Pending requests do
+    // not change the ledger, so verification must still match the exact
+    // current debt in the same direction.
+    if (currentDebt !== settlement.amountPaise) {
       throw new AppError(
-        'The outstanding debt has changed or been settled already',
+        'The outstanding bilateral debt has changed or been settled already',
         409,
         'INVALID_SETTLEMENT_STATE'
       );

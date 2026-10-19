@@ -17,6 +17,8 @@ export interface IPersonalExpenseRepository {
   delete(id: string): Promise<boolean>;
   getMonthlySummary(year: number, month: number): Promise<MonthlySummary>;
   getTotalSummary(): Promise<ExpenseSummary>;
+  getExistingIds(): Promise<Set<string>>;
+  batchInsert(expenses: PersonalExpense[]): Promise<number>;
 }
 
 // Database Row Interface
@@ -240,6 +242,57 @@ export class SQLitePersonalExpenseRepository implements IPersonalExpenseReposito
       categoryBreakdown,
     };
   }
+
+  async getExistingIds(): Promise<Set<string>> {
+    const rows = await this.db.getAllAsync<{ id: string }>(
+      'SELECT id FROM personal_expenses WHERE user_id = ?',
+      this.userId
+    );
+    return new Set(rows.map((r) => r.id));
+  }
+
+  async batchInsert(expenses: PersonalExpense[]): Promise<number> {
+    if (!expenses || expenses.length === 0) return 0;
+
+    let inserted = 0;
+    await this.db.withTransactionAsync(async () => {
+      for (const exp of expenses) {
+        const existing = await this.db.getFirstAsync<{ id: string; user_id: string }>(
+          'SELECT id, user_id FROM personal_expenses WHERE id = ?',
+          exp.id
+        );
+
+        let targetId = exp.id;
+        if (existing) {
+          if (existing.user_id === this.userId) {
+            // Already exists for current user -> skip
+            continue;
+          } else {
+            // Belongs to another account on this device -> allocate fresh unique ID to prevent collision
+            targetId = generateExpenseId();
+          }
+        }
+
+        await this.db.runAsync(
+          `INSERT INTO personal_expenses 
+            (id, user_id, title, description, amount_paise, category_id, expense_date, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          targetId,
+          this.userId,
+          exp.title,
+          exp.description || '',
+          exp.amountPaise,
+          exp.categoryId,
+          exp.expenseDate,
+          exp.createdAt,
+          exp.updatedAt
+        );
+        inserted++;
+      }
+    });
+
+    return inserted;
+  }
 }
 
 /**
@@ -397,5 +450,50 @@ export class InMemoryPersonalExpenseRepository implements IPersonalExpenseReposi
       expenseCount: list.length,
       categoryBreakdown,
     };
+  }
+
+  async getExistingIds(): Promise<Set<string>> {
+    const ids = new Set<string>();
+    for (const exp of this.expenses.values()) {
+      if (exp.userId === this.userId) {
+        ids.add(exp.id);
+      }
+    }
+    return ids;
+  }
+
+  async batchInsert(expenses: PersonalExpense[]): Promise<number> {
+    if (!expenses || expenses.length === 0) return 0;
+
+    // Snapshot for atomic transaction rollback simulation
+    const snapshot = new Map(this.expenses);
+    let inserted = 0;
+    try {
+      for (const exp of expenses) {
+        let targetId = exp.id;
+        if (this.expenses.has(exp.id)) {
+          const existing = this.expenses.get(exp.id)!;
+          if (existing.userId === this.userId) {
+            // Already exists for this user -> skip (safe merge, never duplicate)
+            continue;
+          } else {
+            // Belongs to another user on device -> allocate new ID to preserve isolation
+            targetId = generateExpenseId();
+          }
+        }
+        this.expenses.set(targetId, {
+          ...exp,
+          id: targetId,
+          userId: this.userId,
+          description: exp.description || '',
+        });
+        inserted++;
+      }
+      return inserted;
+    } catch (err) {
+      // Revert to snapshot on transaction failure
+      this.expenses = snapshot;
+      throw err;
+    }
   }
 }

@@ -49,6 +49,7 @@ interface TabItem {
 }
 
 interface SettleUpTarget {
+  debtorId: string;
   receiverId: string;
   receiverDisplayName: string;
   amountPaise: number;
@@ -282,7 +283,15 @@ export default function RoomDetailScreen() {
 
   // Settlement handlers
   const handleConfirmSettleUp = async () => {
-    if (!room || !settleUpTarget || settlingUp) return;
+    if (
+      !room ||
+      !user ||
+      !settleUpTarget ||
+      settleUpTarget.debtorId !== user.uid ||
+      settlingUp
+    ) {
+      return;
+    }
     setSettlingUp(true);
     try {
       await SettlementClientService.createSettlement(room._id, {
@@ -710,6 +719,7 @@ export default function RoomDetailScreen() {
                       title="Settle Up"
                       onPress={() =>
                         setSettleUpTarget({
+                          debtorId: debt.debtorId,
                           receiverId: debt.receiverId,
                           receiverDisplayName: receiverName,
                           amountPaise: debt.amountPaise,

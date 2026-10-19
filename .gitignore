@@ -32,3 +32,4 @@ server/.env*
 Thumbs.db
 firebase-credentials.json
 e-credentials.json
+google-services.json

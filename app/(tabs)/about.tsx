@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  Platform,
+  Modal,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+} from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import { Card } from '../../src/components/Card';
@@ -10,13 +22,28 @@ import { colors } from '../../src/theme/colors';
 import { spacing, radii } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
 import { NotificationService } from '../../src/services/notification-service';
+import { SQLitePersonalExpenseRepository } from '../../src/repositories/personal-expense-repository';
+import { BackupService, ImportPreview } from '../../src/services/backup-service';
 
 export default function AboutScreen() {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const db = useSQLiteContext();
+  const activeUserId = user?.uid || 'guest';
+  const repo = React.useMemo(() => new SQLitePersonalExpenseRepository(db, activeUserId), [db, activeUserId]);
+
   const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean | null>(null);
+
+  // Personal Backup & Restore State
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [pasteModalVisible, setPasteModalVisible] = useState(false);
+  const [pastedJson, setPastedJson] = useState('');
+  const [importConfirmVisible, setImportConfirmVisible] = useState(false);
+  const [pendingPreview, setPendingPreview] = useState<ImportPreview | null>(null);
+  const [executingRestore, setExecutingRestore] = useState(false);
 
   useEffect(() => {
     const checkNotificationStatus = async () => {
@@ -40,6 +67,110 @@ export default function AboutScreen() {
     } finally {
       setLoggingOut(false);
     }
+  };
+
+  const handleExportBackup = async () => {
+    setExporting(true);
+    try {
+      const res = await BackupService.exportBackup(repo);
+      if (res.success) {
+        Alert.alert(
+          'Backup Exported',
+          `Successfully exported ${res.count} personal expense(s) to ${res.filename}.`
+        );
+      } else if (!res.cancelled && res.error) {
+        Alert.alert('Export Failed', res.error);
+      }
+    } catch (err: any) {
+      Alert.alert('Export Error', err?.message || 'Failed to export backup.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const processBackupJson = async (jsonString: string) => {
+    const validation = BackupService.parseAndValidateBackup(jsonString);
+    if (!validation.valid || !validation.data) {
+      Alert.alert('Invalid Backup File', validation.error || 'The backup file could not be validated.');
+      return;
+    }
+
+    try {
+      const preview = await BackupService.previewImport(repo, validation.data);
+      if (preview.totalInBackup === 0) {
+        Alert.alert('Empty Backup', 'The selected backup file contains no expense records.');
+        return;
+      }
+      setPendingPreview(preview);
+      setImportConfirmVisible(true);
+    } catch (err: any) {
+      Alert.alert('Import Error', err?.message || 'Failed to analyze backup file.');
+    }
+  };
+
+  const handleImportFromFile = async () => {
+    setImporting(true);
+    try {
+      const res = await BackupService.importBackupFromFile();
+      if (res.cancelled) {
+        return;
+      }
+      if (res.error) {
+        Alert.alert('File Selection Failed', res.error);
+        return;
+      }
+      if (res.content) {
+        await processBackupJson(res.content);
+      }
+    } catch (err: any) {
+      Alert.alert('Import Error', err?.message || 'Failed to open backup file.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleConfirmPaste = async () => {
+    const text = pastedJson.trim();
+    if (!text) {
+      Alert.alert('Empty Content', 'Please paste valid backup JSON text.');
+      return;
+    }
+    setPasteModalVisible(false);
+    setPastedJson('');
+    await processBackupJson(text);
+  };
+
+  const handleConfirmRestore = async () => {
+    if (!pendingPreview) return;
+    setExecutingRestore(true);
+    try {
+      const result = await BackupService.executeImport(repo, pendingPreview);
+      setImportConfirmVisible(false);
+      setPendingPreview(null);
+      Alert.alert(
+        'Restore Complete',
+        `Restored ${result.importedCount} expense(s) into your personal records.${
+          result.skippedDuplicatesCount > 0
+            ? ` (${result.skippedDuplicatesCount} duplicate(s) already existed and were skipped.)`
+            : ''
+        }`
+      );
+    } catch (err: any) {
+      Alert.alert('Restore Failed', err?.message || 'Failed to restore expenses.');
+    } finally {
+      setExecutingRestore(false);
+    }
+  };
+
+  const getRestoreDialogMessage = () => {
+    if (!pendingPreview) return '';
+    if (pendingPreview.toImportCount === 0) {
+      return `All ${pendingPreview.totalInBackup} expense(s) in this backup already exist in your records. No new expenses will be imported.`;
+    }
+    if (pendingPreview.duplicateCount > 0) {
+      return `This backup contains ${pendingPreview.totalInBackup} expense(s):\n\n• ${pendingPreview.toImportCount} new expense(s) will be restored\n• ${pendingPreview.duplicateCount} duplicate(s) already exist and will be skipped.\n\nDo you want to proceed?`;
+    }
+    return `Restore ${pendingPreview.toImportCount} expense(s) from this backup into your personal records?`;
   };
 
   return (
@@ -188,6 +319,49 @@ export default function AboutScreen() {
         </Card>
       </View>
 
+      {/* Personal Backup & Restore Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Backup & Restore</Text>
+        <Card style={styles.infoCard}>
+          <View style={styles.cardHeaderRow}>
+            <Ionicons name="archive-outline" size={22} color={colors.primary} />
+            <Text style={styles.cardHeaderTitle}>Personal Expense Backups</Text>
+          </View>
+          <Text style={styles.bodyText}>
+            Export your personal expenses to a portable JSON backup file, or restore a previously saved backup onto this device.
+          </Text>
+
+          <View style={styles.backupScopeBox}>
+            <Ionicons name="person-outline" size={16} color={colors.textSecondary} />
+            <Text style={styles.backupScopeText}>
+              Active Scope: <Text style={styles.bold}>{user ? (user.displayName || user.email) : 'Guest (Offline)'}</Text>
+            </Text>
+          </View>
+
+          <View style={styles.backupBtnGroup}>
+            <Button
+              title="Export Personal Backup"
+              onPress={handleExportBackup}
+              loading={exporting}
+              style={styles.backupBtn}
+            />
+            <Button
+              title="Import Backup File"
+              variant="outline"
+              onPress={handleImportFromFile}
+              loading={importing}
+              style={styles.backupBtn}
+            />
+            <Button
+              title="Paste Backup JSON"
+              variant="outline"
+              onPress={() => setPasteModalVisible(true)}
+              style={styles.backupGhostBtn}
+            />
+          </View>
+        </Card>
+      </View>
+
       {/* Financial Precision */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Financial Accuracy</Text>
@@ -238,6 +412,72 @@ export default function AboutScreen() {
         loading={loggingOut}
         onConfirm={handleConfirmLogout}
         onCancel={() => setLogoutDialogVisible(false)}
+      />
+
+      {/* Paste Backup JSON Modal */}
+      <Modal
+        visible={pasteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPasteModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setPasteModalVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Paste Backup JSON</Text>
+                  <TouchableOpacity onPress={() => setPasteModalVisible(false)}>
+                    <Ionicons name="close" size={24} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.modalSub}>
+                  Paste the JSON content from your exported Spendly personal backup file below:
+                </Text>
+                <TextInput
+                  style={styles.pasteInput}
+                  multiline
+                  numberOfLines={8}
+                  placeholder='{"version": 1, "dataType": "personal_expenses", ...}'
+                  placeholderTextColor={colors.textMuted}
+                  value={pastedJson}
+                  onChangeText={setPastedJson}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <View style={styles.modalBtnRow}>
+                  <Button
+                    title="Cancel"
+                    variant="outline"
+                    onPress={() => setPasteModalVisible(false)}
+                    style={styles.modalBtn}
+                  />
+                  <Button
+                    title="Validate & Review"
+                    onPress={handleConfirmPaste}
+                    style={styles.modalBtn}
+                  />
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Import Confirmation Dialog */}
+      <ConfirmationDialog
+        visible={importConfirmVisible}
+        title="Restore Personal Expenses"
+        message={getRestoreDialogMessage()}
+        confirmText={pendingPreview?.toImportCount === 0 ? 'OK' : 'Restore Now'}
+        cancelText={pendingPreview?.toImportCount === 0 ? 'Close' : 'Cancel'}
+        onConfirm={
+          pendingPreview?.toImportCount === 0
+            ? () => setImportConfirmVisible(false)
+            : handleConfirmRestore
+        }
+        onCancel={() => setImportConfirmVisible(false)}
+        loading={executingRestore}
       />
     </ScrollView>
   );
@@ -470,5 +710,88 @@ const styles = StyleSheet.create({
   notifBtn: {
     marginTop: spacing.xs,
     width: '100%',
+  },
+  backupScopeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.background,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    marginBottom: spacing.md,
+  },
+  backupScopeText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  backupBtnGroup: {
+    gap: spacing.sm,
+  },
+  backupBtn: {
+    width: '100%',
+  },
+  backupGhostBtn: {
+    width: '100%',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  modalTitle: {
+    ...typography.h3,
+    color: colors.textPrimary,
+  },
+  modalSub: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+    lineHeight: 18,
+  },
+  pasteInput: {
+    minHeight: 140,
+    maxHeight: 220,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    ...typography.bodySmall,
+    color: colors.textPrimary,
+    textAlignVertical: 'top',
+    marginBottom: spacing.lg,
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  modalBtn: {
+    flex: 1,
   },
 });
