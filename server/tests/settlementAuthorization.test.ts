@@ -30,20 +30,24 @@ describe('settlement authorization and direction', () => {
     (Settlement.findOne as jest.Mock).mockResolvedValue(null);
   });
 
-  test('cannot create a settlement for the reverse direction of Dev’s debt', async () => {
-    // Param is the creditor; Param cannot initiate Dev -> Param repayment.
-    (BalanceService.computeBilateralDebt as jest.Mock).mockResolvedValue(-1800);
+  test('cannot create a settlement for the reverse direction of Dev’s net debt', async () => {
+    // Param is the creditor; Param cannot initiate a transfer to Dev.
+    (BalanceService.getSuggestedTransfer as jest.Mock).mockResolvedValue(undefined);
 
     await expect(
       SettlementService.createSettlement('param', roomId.toString(), {
         receiverId: 'dev',
         amountPaise: 1800,
       })
-    ).rejects.toMatchObject({ code: 'NO_OUTSTANDING_DEBT' });
+    ).rejects.toMatchObject({ code: 'NO_OUTSTANDING_NET_TRANSFER' });
   });
 
-  test('rejects a settlement that overpays the current bilateral debt', async () => {
-    (BalanceService.computeBilateralDebt as jest.Mock).mockResolvedValue(1800);
+  test('rejects a settlement that overpays the current canonical transfer', async () => {
+    (BalanceService.getSuggestedTransfer as jest.Mock).mockResolvedValue({
+      fromUserId: 'dev',
+      toUserId: 'param',
+      amountPaise: 1800,
+    });
 
     await expect(
       SettlementService.createSettlement('dev', roomId.toString(), {
@@ -66,7 +70,7 @@ describe('settlement authorization and direction', () => {
     await expect(
       SettlementService.verifySettlement('dev', '507f1f77bcf86cd799439099')
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    expect(BalanceService.computeBilateralDebt).not.toHaveBeenCalled();
+    expect(BalanceService.getSuggestedTransfer).not.toHaveBeenCalled();
   });
 
   test('verification rejects a changed amount instead of partially settling it', async () => {
@@ -79,11 +83,37 @@ describe('settlement authorization and direction', () => {
       status: 'pending',
     };
     (Settlement.findById as jest.Mock).mockResolvedValue(settlement);
-    (BalanceService.computeBilateralDebt as jest.Mock).mockResolvedValue(3600);
+    (BalanceService.getSuggestedTransfer as jest.Mock).mockResolvedValue({
+      fromUserId: 'dev',
+      toUserId: 'param',
+      amountPaise: 3600,
+    });
 
     await expect(
       SettlementService.verifySettlement('param', '507f1f77bcf86cd799439099')
     ).rejects.toMatchObject({ code: 'INVALID_SETTLEMENT_STATE' });
     expect(Settlement.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  test('does not complete a settlement when the atomic pending-state update loses a race', async () => {
+    const settlement = {
+      _id: new mongoose.Types.ObjectId(),
+      roomId,
+      debtorId: 'dev',
+      receiverId: 'param',
+      amountPaise: 1800,
+      status: 'pending',
+    };
+    (Settlement.findById as jest.Mock).mockResolvedValue(settlement);
+    (BalanceService.getSuggestedTransfer as jest.Mock).mockResolvedValue({
+      fromUserId: 'dev',
+      toUserId: 'param',
+      amountPaise: 1800,
+    });
+    (Settlement.findOneAndUpdate as jest.Mock).mockResolvedValue(null);
+
+    await expect(
+      SettlementService.verifySettlement('param', '507f1f77bcf86cd799439099')
+    ).rejects.toMatchObject({ code: 'INVALID_SETTLEMENT_STATE' });
   });
 });

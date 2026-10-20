@@ -4,7 +4,7 @@ import * as apiClient from '../src/services/api-client';
 
 jest.mock('../src/services/api-client');
 
-describe('SettlementClientService & BalanceClientService Bilateral Debts', () => {
+describe('SettlementClientService and canonical balance transfers', () => {
   const mockApiRequest = apiClient.apiRequest as jest.Mock;
 
   beforeEach(() => {
@@ -101,19 +101,4 @@ describe('SettlementClientService & BalanceClientService Bilateral Debts', () =>
     });
   });
 
-  describe('BalanceClientService Bilateral Debts', () => {
-    test('getRoomBilateralDebts calls GET /rooms/:roomId/bilateral-debts', async () => {
-      const mockDebts = [
-        { debtorId: 'user_1', receiverId: 'user_2', amountPaise: 25000 },
-      ];
-      mockApiRequest.mockResolvedValueOnce({ debts: mockDebts });
-
-      const result = await BalanceClientService.getRoomBilateralDebts('room_456');
-
-      expect(mockApiRequest).toHaveBeenCalledWith('/rooms/room_456/bilateral-debts', {
-        method: 'GET',
-      });
-      expect(result).toEqual(mockDebts);
-    });
-  });
 });

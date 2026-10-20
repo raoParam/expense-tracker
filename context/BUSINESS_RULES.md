@@ -68,12 +68,12 @@ Rules:
 - Do not permanently delete a room with confirmed financial history or outstanding debts; archive it instead.
 
 ## 7. Settlement
-- V1 settlement is atomic and full bilateral amount only; no partial settlement.
+- V1 settlement is atomic and matches one current canonical suggested transfer; no partial settlement.
 - Debtor requests repayment verification after transferring funds.
 - Only the named receiver can verify or reject the repayment request.
 - Only verified settlements change balances.
 - Rejected settlements leave the debt unchanged and record the rejection reason.
-- A settlement must not exceed the current valid outstanding bilateral debt when created or verified.
+- The authenticated debtor must be the transfer sender, the receiver must be an active room member, and the amount must match the current net-balance transfer when created and verified.
 - Use idempotency keys and concurrency controls so repeated requests or concurrent verification cannot settle twice.
 - Preserve full settlement history for auditing.
 
@@ -97,8 +97,8 @@ Where:
 ### Key Invariants
 1. **Conservation of Money**: The sum of all member balances in any room must strictly equal zero:
    $$\sum_{u \in \text{Room}} \text{balance}[u] = 0$$
-2. **Net Debts**: Bilateral reverse debts between any two members are aggregated to display a single net amount.
-3. **In-Memory Graph**: The directed debt simplification graph is generated dynamically in memory from net balances. Graph edges are temporary calculation artifacts and are never persisted as source-of-truth records.
+2. **Canonical Transfers**: The directed transfer projection is generated dynamically in memory from these net balances. It is used for suggestions and settlement authorization; it is never persisted as a source-of-truth debt record.
+3. **Historical Settlements**: Existing verified settlement records are interpreted as actual debtor-to-receiver payments under this formula. The system does not infer or rewrite their original expense pairing.
 4. **Transfer Conservation**: Suggested transfers must conserve money and completely settle all net balances.
 
 ## 9. Offline and local data

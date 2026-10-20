@@ -45,10 +45,10 @@ Core promise: every shared expense has an identifiable payer, explicit allocatio
 - Calculate net balances from confirmed expenses and verified settlements
 - Generate a directed graph in memory to calculate and suggest a low number of payments
 - Graph is never persisted as source-of-truth data
-- V1 settlements are atomic full bilateral settlements; no partial payments
+- V1 settlements are atomic full canonical net-balance transfers; no partial payments
 - Debtor requests settlement; recipient verifies or rejects
 - Only verified settlement changes balances
-- Aggregate reverse debts between the same pair for net display
+- Settle Up actions use the same suggested transfers generated from room net balances
 
 ### 3.5 Abuse prevention
 - If every other selected participant rejects an expense, the expense is unanimously rejected

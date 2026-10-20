@@ -76,7 +76,7 @@ Use Expo Router and keep route names stable and understandable.
 - Audit history appropriate to user permissions
 
 ### Settlement
-- Current bilateral debt
+- Current suggested transfer from the room's net balances
 - Mark paid/request verification
 - Recipient verify/reject actions
 - Clearly distinguish requested vs verified

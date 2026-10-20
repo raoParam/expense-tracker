@@ -87,26 +87,29 @@ export const SettlementService = {
       );
     }
 
-    // Compute exact full outstanding bilateral debt
-    const fullBilateralDebt = await BalanceService.computeBilateralDebt(
-      room._id,
+    // The client may only request the current canonical suggested transfer.
+    // This is derived from all room net balances, never from a client-supplied
+    // or separately calculated historical debt.
+    const suggestedTransfer = await BalanceService.getSuggestedTransfer(
+      callerId,
+      room._id.toString(),
       callerId,
       input.receiverId
     );
 
-    if (fullBilateralDebt <= 0) {
+    if (!suggestedTransfer) {
       throw new AppError(
-        'You do not have any outstanding bilateral debt with this member',
+        'You do not have an outstanding net-balance transfer to this member',
         400,
-        'NO_OUTSTANDING_DEBT'
+        'NO_OUTSTANDING_NET_TRANSFER'
       );
     }
 
-    if (input.amountPaise !== fullBilateralDebt) {
+    if (input.amountPaise !== suggestedTransfer.amountPaise) {
       throw new AppError(
-        `Settlement must be for the exact full outstanding bilateral debt of ₹${(
-          fullBilateralDebt / 100
-        ).toFixed(2)} (${fullBilateralDebt} paise)`,
+        `Settlement must match the current suggested net-balance transfer of ₹${(
+          suggestedTransfer.amountPaise / 100
+        ).toFixed(2)} (${suggestedTransfer.amountPaise} paise)`,
         400,
         'INVALID_SETTLEMENT_AMOUNT'
       );
@@ -247,19 +250,18 @@ export const SettlementService = {
       throw new AppError('Settlement record is invalid', 409, 'INVALID_SETTLEMENT_STATE');
     }
 
-    // Concurrency / Debt limit safety: Check that the debt is still at least this amount
-    const currentDebt = await BalanceService.computeBilateralDebt(
-      settlement.roomId,
+    // Concurrency / stale-transfer safety: pending settlements do not change
+    // balances, so verification must still match the exact current canonical
+    // transfer immediately before the atomic status transition.
+    const currentTransfer = await BalanceService.getSuggestedTransfer(
+      callerId,
+      settlement.roomId.toString(),
       settlement.debtorId,
       settlement.receiverId
     );
-
-    // V1 settlements are atomic full bilateral repayments. Pending requests do
-    // not change the ledger, so verification must still match the exact
-    // current debt in the same direction.
-    if (currentDebt !== settlement.amountPaise) {
+    if (!currentTransfer || currentTransfer.amountPaise !== settlement.amountPaise) {
       throw new AppError(
-        'The outstanding bilateral debt has changed or been settled already',
+        'The outstanding net-balance transfer has changed or been settled already',
         409,
         'INVALID_SETTLEMENT_STATE'
       );

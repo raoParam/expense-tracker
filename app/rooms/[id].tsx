@@ -24,7 +24,6 @@ import {
   BalanceClientService,
   RoomBalancesResult,
   SuggestedSettlementsResult,
-  BilateralDebtInfo,
 } from '../../src/services/balance-client';
 import {
   SettlementClientService,
@@ -72,7 +71,6 @@ export default function RoomDetailScreen() {
   const [expenses, setExpenses] = useState<SharedExpense[]>([]);
   const [balancesData, setBalancesData] = useState<RoomBalancesResult | null>(null);
   const [settlementsData, setSettlementsData] = useState<SuggestedSettlementsResult | null>(null);
-  const [bilateralDebts, setBilateralDebts] = useState<BilateralDebtInfo[]>([]);
   const [roomSettlements, setRoomSettlements] = useState<SettlementModel[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -112,12 +110,11 @@ export default function RoomDetailScreen() {
     setError(null);
 
     try {
-      const [roomRes, expRes, balRes, setRes, debtsRes, settlementsRes] = await Promise.all([
+      const [roomRes, expRes, balRes, setRes, settlementsRes] = await Promise.all([
         RoomClientService.getRoomById(id),
         ExpenseClientService.listRoomExpenses(id).catch(() => []),
         BalanceClientService.getRoomBalances(id).catch(() => null),
         BalanceClientService.getSuggestedSettlements(id).catch(() => null),
-        BalanceClientService.getRoomBilateralDebts(id).catch(() => []),
         SettlementClientService.listRoomSettlements(id).catch(() => []),
       ]);
 
@@ -125,7 +122,6 @@ export default function RoomDetailScreen() {
       setExpenses(expRes);
       setBalancesData(balRes);
       setSettlementsData(setRes);
-      setBilateralDebts(debtsRes);
       setRoomSettlements(settlementsRes);
     } catch (err: any) {
       setError(err?.message || 'Failed to load room details.');
@@ -148,10 +144,6 @@ export default function RoomDetailScreen() {
   const activeMembers = room?.members.filter((m) => m.status === 'active') || [];
   const removedMembers = room?.members.filter((m) => m.status === 'removed') || [];
 
-  // Debts related to current user
-  const myDebtsToOthers = bilateralDebts.filter((d) => d.debtorId === user?.uid);
-  const debtsOthersOweMe = bilateralDebts.filter((d) => d.receiverId === user?.uid);
-
   // Pending settlements
   const pendingRequestsToVerify = roomSettlements.filter(
     (s) => s.status === 'pending' && s.receiverId === user?.uid
@@ -159,6 +151,9 @@ export default function RoomDetailScreen() {
   const myPendingRequestsSent = roomSettlements.filter(
     (s) => s.status === 'pending' && s.debtorId === user?.uid
   );
+  const suggestedTransfers = settlementsData?.suggestedTransfers || [];
+  const mySuggestedTransfers = suggestedTransfers.filter((transfer) => transfer.fromUserId === user?.uid);
+  const suggestedTransfersToMe = suggestedTransfers.filter((transfer) => transfer.toUserId === user?.uid);
 
   const TABS: TabItem[] = [
     {
@@ -586,7 +581,7 @@ export default function RoomDetailScreen() {
         <View style={styles.settlementHintBox}>
           <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />
           <Text style={styles.settlementHintText}>
-            Suggested transfers simplify multi-party balances. To record and verify actual repayments, swipe to the Settlements tab.
+            These transfers come from the current room net balances. They are the recommended repayment paths for this group, not historical bilateral debt records.
           </Text>
         </View>
       </Card>
@@ -692,65 +687,74 @@ export default function RoomDetailScreen() {
         </View>
       )}
 
-      {/* Direct Bilateral Debts / Settle Up Options */}
-      <Text style={styles.sectionTitle}>Direct Bilateral Debts</Text>
-      <Card style={styles.bilateralCard}>
-        {myDebtsToOthers.length === 0 && debtsOthersOweMe.length === 0 ? (
+      {/* Canonical net-balance transfers / Settle Up Options */}
+      <Text style={styles.sectionTitle}>Suggested Settle Up Transfers</Text>
+      <Card style={styles.transferCard}>
+        <View style={styles.settlementHintBox}>
+          <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />
+          <Text style={styles.settlementHintText}>
+            Amounts are calculated from the group's current outstanding net balances. A transfer may not match a historical expense pair.
+          </Text>
+        </View>
+        {mySuggestedTransfers.length === 0 && suggestedTransfersToMe.length === 0 ? (
           <View style={styles.settledContainer}>
             <Ionicons name="checkmark-circle-outline" size={28} color={colors.success} />
-            <Text style={styles.settledText}>You have no direct outstanding debts.</Text>
+            <Text style={styles.settledText}>There are no suggested net-balance transfers for you.</Text>
           </View>
         ) : (
           <>
-            {/* You Owe Others */}
-            {myDebtsToOthers.map((debt, index) => {
-              const receiverMember = room.members.find((m) => m.userId === debt.receiverId);
-              const receiverName = receiverMember?.displayName || debt.receiverDisplayName || 'Roommate';
+            {mySuggestedTransfers.map((transfer, index) => {
+              const receiverMember = room.members.find((m) => m.userId === transfer.toUserId);
+              const receiverName = receiverMember?.displayName || transfer.toDisplayName || 'Roommate';
+              const hasPendingRequest = myPendingRequestsSent.some(
+                (request) => request.receiverId === transfer.toUserId
+              );
 
               return (
                 <View
-                  key={`owe_${debt.receiverId}_${index}`}
-                  style={[styles.bilateralRow, index === myDebtsToOthers.length - 1 && debtsOthersOweMe.length === 0 && styles.lastRow]}
+                  key={`suggested_outgoing_${transfer.toUserId}_${index}`}
+                  style={[styles.transferRow, index === mySuggestedTransfers.length - 1 && suggestedTransfersToMe.length === 0 && styles.lastRow]}
                 >
-                  <View style={styles.bilateralInfo}>
-                    <Text style={styles.bilateralName}>You owe {receiverName}</Text>
-                    <Text style={styles.bilateralAmountOwe}>
-                      ₹{paiseToRupees(debt.amountPaise)}
+                  <View style={styles.transferInfo}>
+                    <Text style={styles.transferName}>You pay {receiverName}</Text>
+                    <Text style={styles.transferAmountOwe}>
+                      ₹{paiseToRupees(transfer.amountPaise)}
                     </Text>
                   </View>
 
-                  {room.status === 'active' && (
+                  {hasPendingRequest ? (
+                    <Text style={styles.awaitingRepayText}>Awaiting verification</Text>
+                  ) : room.status === 'active' ? (
                     <Button
                       title="Settle Up"
                       onPress={() =>
                         setSettleUpTarget({
-                          debtorId: debt.debtorId,
-                          receiverId: debt.receiverId,
+                          debtorId: transfer.fromUserId,
+                          receiverId: transfer.toUserId,
                           receiverDisplayName: receiverName,
-                          amountPaise: debt.amountPaise,
+                          amountPaise: transfer.amountPaise,
                         })
                       }
                       style={styles.settleUpBtn}
                     />
-                  )}
+                  ) : null}
                 </View>
               );
             })}
 
-            {/* Others Owe You */}
-            {debtsOthersOweMe.map((debt, index) => {
-              const debtorMember = room.members.find((m) => m.userId === debt.debtorId);
-              const debtorName = debtorMember?.displayName || debt.debtorDisplayName || 'Roommate';
+            {suggestedTransfersToMe.map((transfer, index) => {
+              const debtorMember = room.members.find((m) => m.userId === transfer.fromUserId);
+              const debtorName = debtorMember?.displayName || transfer.fromDisplayName || 'Roommate';
 
               return (
                 <View
-                  key={`owed_${debt.debtorId}_${index}`}
-                  style={[styles.bilateralRow, index === debtsOthersOweMe.length - 1 && styles.lastRow]}
+                  key={`suggested_incoming_${transfer.fromUserId}_${index}`}
+                  style={[styles.transferRow, index === suggestedTransfersToMe.length - 1 && styles.lastRow]}
                 >
-                  <View style={styles.bilateralInfo}>
-                    <Text style={styles.bilateralName}>{debtorName} owes you</Text>
-                    <Text style={styles.bilateralAmountOwed}>
-                      +₹{paiseToRupees(debt.amountPaise)}
+                  <View style={styles.transferInfo}>
+                    <Text style={styles.transferName}>{debtorName} pays you</Text>
+                    <Text style={styles.transferAmountOwed}>
+                      +₹{paiseToRupees(transfer.amountPaise)}
                     </Text>
                   </View>
 
@@ -1124,11 +1128,11 @@ export default function RoomDetailScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Ionicons name="wallet-outline" size={32} color={colors.primary} />
-              <Text style={styles.modalTitle}>Settle Bilateral Debt</Text>
+              <Text style={styles.modalTitle}>Settle Group Balance</Text>
             </View>
 
             <Text style={styles.modalDesc}>
-              Request settlement of the full outstanding debt of{' '}
+              Request settlement of the current suggested group transfer of{' '}
               <Text style={{ fontWeight: '700', color: colors.textPrimary }}>
                 ₹{settleUpTarget ? paiseToRupees(settleUpTarget.amountPaise) : '0.00'}
               </Text>{' '}
@@ -1799,11 +1803,11 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     paddingHorizontal: 8,
   },
-  bilateralCard: {
+  transferCard: {
     padding: 0,
     overflow: 'hidden',
   },
-  bilateralRow: {
+  transferRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -1811,22 +1815,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.borderSubtle,
   },
-  bilateralInfo: {
+  transferInfo: {
     flex: 1,
     marginRight: spacing.sm,
   },
-  bilateralName: {
+  transferName: {
     ...typography.bodyMedium,
     fontWeight: '600',
     color: colors.textPrimary,
   },
-  bilateralAmountOwe: {
+  transferAmountOwe: {
     ...typography.amountMedium,
     fontWeight: '700',
     color: colors.danger,
     marginTop: 2,
   },
-  bilateralAmountOwed: {
+  transferAmountOwed: {
     ...typography.amountMedium,
     fontWeight: '700',
     color: colors.success,

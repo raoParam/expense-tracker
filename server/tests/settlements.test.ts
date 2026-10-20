@@ -42,7 +42,7 @@ describe('Settlement API Endpoints', () => {
   });
 
   describe('POST /api/v1/rooms/:roomId/settlements', () => {
-    test('creates settlement verification request for exact full bilateral debt', async () => {
+    test('creates settlement verification request for a canonical transfer', async () => {
       const mockSettlement = {
         _id: '707f1f77bcf86cd799439099',
         roomId: '507f1f77bcf86cd799439011',
@@ -230,25 +230,23 @@ describe('Settlement API Endpoints', () => {
     });
   });
 
-  describe('GET /api/v1/rooms/:roomId/bilateral-debts', () => {
-    test('fetches bilateral debts', async () => {
-      const mockDebts = [
-        {
-          debtorId: 'user_debtor_1',
-          receiverId: 'user_receiver_2',
-          amountPaise: 25000,
-        },
-      ];
-
-      (BalanceService.getRoomBilateralDebts as jest.Mock).mockResolvedValueOnce(mockDebts);
+  describe('GET /api/v1/rooms/:roomId/bilateral-debts (legacy alias)', () => {
+    test('returns the canonical suggested transfers for older clients', async () => {
+      (BalanceService.getSuggestedSettlements as jest.Mock).mockResolvedValueOnce({
+        roomId: '507f1f77bcf86cd799439011',
+        suggestedTransfers: [
+          { fromUserId: 'zeno', toUserId: 'prince', amountPaise: 4000, currency: 'INR' },
+        ],
+      });
 
       const res = await request(app)
         .get('/api/v1/rooms/507f1f77bcf86cd799439011/bilateral-debts')
         .set('Authorization', 'Bearer valid-token');
 
       expect(res.status).toBe(200);
-      expect(res.body.debts.length).toBe(1);
-      expect(res.body.debts[0].amountPaise).toBe(25000);
+      expect(res.body.debts).toEqual([
+        expect.objectContaining({ debtorId: 'zeno', receiverId: 'prince', amountPaise: 4000 }),
+      ]);
     });
   });
 

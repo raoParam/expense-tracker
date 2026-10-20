@@ -291,7 +291,7 @@ router.get('/:roomId/balances', async (req: Request, res: Response, next: NextFu
 });
 
 /**
- * GET /api/v1/rooms/:roomId/suggested-settlements — Fetch suggested debt simplification transfers
+ * GET /api/v1/rooms/:roomId/suggested-settlements — Fetch canonical net-balance transfers
  */
 router.get('/:roomId/suggested-settlements', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -304,13 +304,23 @@ router.get('/:roomId/suggested-settlements', async (req: Request, res: Response,
 });
 
 /**
- * GET /api/v1/rooms/:roomId/bilateral-debts — Fetch bilateral debts for room members
+ * Legacy compatibility for already-installed clients. This is not a second
+ * accounting path: it aliases the canonical suggested transfers and can be
+ * removed after the OTA adoption window.
  */
 router.get('/:roomId/bilateral-debts', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const roomId = Array.isArray(req.params.roomId) ? req.params.roomId[0] : req.params.roomId;
-    const debts = await BalanceService.getRoomBilateralDebts(req.user!.uid, roomId);
-    res.status(200).json({ debts });
+    const { suggestedTransfers } = await BalanceService.getSuggestedSettlements(req.user!.uid, roomId);
+    res.status(200).json({
+      debts: suggestedTransfers.map((transfer) => ({
+        debtorId: transfer.fromUserId,
+        debtorDisplayName: transfer.fromDisplayName,
+        receiverId: transfer.toUserId,
+        receiverDisplayName: transfer.toDisplayName,
+        amountPaise: transfer.amountPaise,
+      })),
+    });
   } catch (err) {
     next(err);
   }

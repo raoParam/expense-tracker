@@ -45,12 +45,13 @@ Authentication is handled via Firebase Authentication:
 - `POST /expenses/:expenseId/cancel` — payer explicitly cancels pending/resubmission-requested expense before confirmation
 
 ## 6. Balances
-- `GET /rooms/:roomId/balances` — authoritative net balances
-- `GET /rooms/:roomId/suggested-settlements` — suggested transfers generated from current balances
+- `GET /rooms/:roomId/balances` — fresh authoritative net balances from confirmed expenses and verified settlements
+- `GET /rooms/:roomId/suggested-settlements` — deterministic transfer projection generated from those exact balances; these transfers are also the only valid Settle Up requests
+- `GET /rooms/:roomId/bilateral-debts` — deprecated compatibility alias for the same suggested transfers; no separate bilateral calculation is maintained
 
 ## 7. Settlements
 - `GET /rooms/:roomId/settlements` — authorized settlement history
-- `POST /rooms/:roomId/settlements` — create repayment verification request; idempotency key required
+- `POST /rooms/:roomId/settlements` — create verification request for the authenticated debtor's current suggested transfer; idempotency key required
 - `POST /settlements/:settlementId/verify` — receiver only; version/state validation
 - `POST /settlements/:settlementId/reject` — receiver only; mandatory reason
 

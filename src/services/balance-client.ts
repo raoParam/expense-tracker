@@ -18,14 +18,6 @@ export interface SuggestedTransfer {
   currency: 'INR';
 }
 
-export interface BilateralDebtInfo {
-  debtorId: string;
-  receiverId: string;
-  debtorDisplayName?: string;
-  receiverDisplayName?: string;
-  amountPaise: number;
-}
-
 export interface RoomBalancesResult {
   roomId: string;
   balances: MemberBalance[];
@@ -59,16 +51,4 @@ export const BalanceClientService = {
     });
   },
 
-  /**
-   * Fetch bilateral debts for room members
-   */
-  async getRoomBilateralDebts(roomId: string): Promise<BilateralDebtInfo[]> {
-    const res = await apiRequest<{ debts: BilateralDebtInfo[] }>(
-      `/rooms/${roomId}/bilateral-debts`,
-      {
-        method: 'GET',
-      }
-    );
-    return res.debts;
-  },
 };
