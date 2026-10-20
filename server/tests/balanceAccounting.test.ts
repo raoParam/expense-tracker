@@ -3,6 +3,7 @@ import { BalanceService } from '../src/services/balanceService';
 import { Expense } from '../src/models/Expense';
 import { Settlement } from '../src/models/Settlement';
 import { Room } from '../src/models/Room';
+import { calculateRoomAccounting } from '../src/services/roomAccounting';
 
 jest.mock('../src/models/Expense');
 jest.mock('../src/models/Settlement');
@@ -117,5 +118,75 @@ describe('shared-room accounting and settlement directions', () => {
     expect(await BalanceService.computeBilateralDebt(roomObjectId, 'param', 'dev')).toBe(-1800);
     expect(await BalanceService.computeBilateralDebt(roomObjectId, 'het', 'prince')).toBe(5400);
     expect(await BalanceService.computeBilateralDebt(roomObjectId, 'prince', 'het')).toBe(-5400);
+  });
+
+  test('reduces the matching debt for a partial verified payment across multiple expenses', () => {
+    const accounting = calculateRoomAccounting(
+      [
+        {
+          payerId: 'param',
+          amountPaise: 1200,
+          participants: [{ userId: 'dev', sharePaise: 1200 }],
+        },
+        {
+          payerId: 'param',
+          amountPaise: 1800,
+          participants: [{ userId: 'dev', sharePaise: 1800 }],
+        },
+      ],
+      [{ debtorId: 'dev', receiverId: 'param', amountPaise: 1000 }]
+    );
+
+    expect(accounting.bilateralDebts.get('dev\u0000param')).toBe(2000);
+    expect(accounting.bilateralDebts.get('param\u0000dev')).toBeUndefined();
+  });
+
+  test('pending, rejected, and cancelled settlements do not reduce debt', async () => {
+    const expenses = [
+      {
+        payerId: 'param',
+        amountPaise: 1800,
+        participants: [{ userId: 'dev', sharePaise: 1800 }],
+      },
+    ];
+
+    const results: number[] = [];
+    for (const status of ['pending', 'rejected', 'cancelled', 'verified']) {
+      (Expense.find as jest.Mock).mockResolvedValueOnce(expenses);
+      (Settlement.find as jest.Mock).mockResolvedValueOnce(
+        status === 'verified'
+          ? [{ debtorId: 'dev', receiverId: 'param', amountPaise: 1800 }]
+          : []
+      );
+      results.push(await BalanceService.computeBilateralDebt(roomObjectId, 'dev', 'param'));
+    }
+
+    expect(results).toEqual([1800, 1800, 1800, 0]);
+  });
+
+  test('a verified payment without an underlying liability cannot fabricate a reverse debt', () => {
+    const accounting = calculateRoomAccounting(
+      [],
+      [{ debtorId: 'prince', receiverId: 'param', amountPaise: 6500 }]
+    );
+
+    expect(accounting.bilateralDebts.get('prince\u0000param')).toBeUndefined();
+    expect(accounting.bilateralDebts.get('param\u0000prince')).toBeUndefined();
+  });
+
+  test('applies the Prince to Param verified ₹65 payment in its recorded direction', () => {
+    const accounting = calculateRoomAccounting(
+      [
+        {
+          payerId: 'param',
+          amountPaise: 10000,
+          participants: [{ userId: 'prince', sharePaise: 10000 }],
+        },
+      ],
+      [{ debtorId: 'prince', receiverId: 'param', amountPaise: 6500 }]
+    );
+
+    expect(accounting.bilateralDebts.get('prince\u0000param')).toBe(3500);
+    expect(accounting.bilateralDebts.get('param\u0000prince')).toBeUndefined();
   });
 });

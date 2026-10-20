@@ -42,6 +42,17 @@ describe('settlement authorization and direction', () => {
     ).rejects.toMatchObject({ code: 'NO_OUTSTANDING_DEBT' });
   });
 
+  test('rejects a settlement that overpays the current bilateral debt', async () => {
+    (BalanceService.computeBilateralDebt as jest.Mock).mockResolvedValue(1800);
+
+    await expect(
+      SettlementService.createSettlement('dev', roomId.toString(), {
+        receiverId: 'param',
+        amountPaise: 1801,
+      })
+    ).rejects.toMatchObject({ code: 'INVALID_SETTLEMENT_AMOUNT' });
+  });
+
   test('only the named receiver can verify Het’s pending repayment', async () => {
     (Settlement.findById as jest.Mock).mockResolvedValue({
       _id: new mongoose.Types.ObjectId(),

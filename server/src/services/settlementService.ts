@@ -222,6 +222,31 @@ export const SettlementService = {
       throw new AppError('Only the recipient can verify this settlement', 403, 'FORBIDDEN');
     }
 
+    // Re-check room membership at verification time. The client is never the
+    // authority for who may complete a settlement, even if the request was
+    // created while both users were members.
+    const room = await Room.findById(settlement.roomId);
+    if (!room) {
+      throw new AppError('Room not found', 404, 'ROOM_NOT_FOUND');
+    }
+    const receiverIsMember = room.members.some(
+      (member) => member.userId === settlement.receiverId && member.status === 'active'
+    );
+    const debtorIsMember = room.members.some(
+      (member) => member.userId === settlement.debtorId && member.status === 'active'
+    );
+    if (!receiverIsMember || !debtorIsMember) {
+      throw new AppError('Both settlement parties must be active room members', 403, 'NOT_ROOM_MEMBER');
+    }
+
+    if (
+      settlement.debtorId === settlement.receiverId ||
+      !Number.isSafeInteger(settlement.amountPaise) ||
+      settlement.amountPaise <= 0
+    ) {
+      throw new AppError('Settlement record is invalid', 409, 'INVALID_SETTLEMENT_STATE');
+    }
+
     // Concurrency / Debt limit safety: Check that the debt is still at least this amount
     const currentDebt = await BalanceService.computeBilateralDebt(
       settlement.roomId,

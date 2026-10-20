@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import {
   NativeScrollEvent,
   LayoutChangeEvent,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Room, RoomMember, RoomClientService, InvitationInfo } from '../../src/services/room-service';
 import { ExpenseClientService, SharedExpense } from '../../src/services/expense-client';
@@ -135,9 +135,14 @@ export default function RoomDetailScreen() {
     }
   }, [id]);
 
-  useEffect(() => {
-    fetchRoomData();
-  }, [fetchRoomData]);
+  // Room details can remain mounted while a child screen is pushed. Refresh
+  // on focus so confirmed expenses and verified settlements are never shown
+  // from the previous screen's snapshot.
+  useFocusEffect(
+    useCallback(() => {
+      fetchRoomData();
+    }, [fetchRoomData])
+  );
 
   const isAdmin = Boolean(user && room && room.adminId === user.uid);
   const activeMembers = room?.members.filter((m) => m.status === 'active') || [];
@@ -306,7 +311,7 @@ export default function RoomDetailScreen() {
           settleUpTarget.amountPaise
         )} has been sent to ${settleUpTarget.receiverDisplayName}. Your balance will update once they verify receipt.`
       );
-      fetchRoomData(true);
+      await fetchRoomData(true);
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to create settlement request.');
     } finally {
@@ -320,7 +325,7 @@ export default function RoomDetailScreen() {
     try {
       await SettlementClientService.verifySettlement(settlementId);
       Alert.alert('Repayment Verified', 'The settlement has been verified and balances have been updated.');
-      fetchRoomData(true);
+      await fetchRoomData(true);
     } catch (err: any) {
       Alert.alert('Verification Failed', err?.message || 'Failed to verify settlement.');
     } finally {
@@ -346,7 +351,7 @@ export default function RoomDetailScreen() {
       setRejectingSettlementId(null);
       setRejectReason('');
       Alert.alert('Settlement Rejected', 'The settlement request was rejected with your reason.');
-      fetchRoomData(true);
+      await fetchRoomData(true);
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to reject settlement.');
     } finally {
@@ -360,7 +365,7 @@ export default function RoomDetailScreen() {
     try {
       await SettlementClientService.cancelSettlement(settlementId);
       Alert.alert('Request Cancelled', 'Your repayment settlement request was cancelled.');
-      fetchRoomData(true);
+      await fetchRoomData(true);
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Failed to cancel settlement request.');
     } finally {

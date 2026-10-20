@@ -56,8 +56,9 @@ const addToMap = (map: Map<string, number>, key: string, amountPaise: number): v
  * Builds the authoritative accounting view for a room.
  *
  * An expense creates edges participant -> payer for each participant's share.
- * A verified settlement removes an edge debtor -> receiver. This is the
- * bilateral meaning of a repayment; it is not a new expense or suggestion.
+ * A verified settlement reduces only the matching edge. It can never create a
+ * reverse edge: a settlement is a payment against an existing ledger
+ * liability, not a suggested transfer or a new expense.
  */
 export function calculateRoomAccounting(
   expenses: AccountingExpense[],
@@ -104,8 +105,12 @@ export function calculateRoomAccounting(
     addToMap(paidMap, settlement.debtorId, settlement.amountPaise);
     addToMap(shareMap, settlement.receiverId, settlement.amountPaise);
 
-    // A verified repayment reduces the debtor -> receiver debt.
-    addToMap(grossDebts, pairKey(settlement.debtorId, settlement.receiverId), -settlement.amountPaise);
+    // A verified repayment reduces only the matching confirmed-expense
+    // liability. Do not allow malformed or historically over-large payments
+    // to manufacture a debt in the opposite direction.
+    const debtKey = pairKey(settlement.debtorId, settlement.receiverId);
+    const existingDebt = grossDebts.get(debtKey) || 0;
+    grossDebts.set(debtKey, Math.max(0, existingDebt - settlement.amountPaise));
   }
 
   const bilateralDebts = new Map<string, number>();

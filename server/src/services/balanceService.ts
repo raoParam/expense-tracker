@@ -127,9 +127,11 @@ export const BalanceService = {
 
   /**
    * Compute exact bilateral debt from debtor to receiver in a given room.
-   * BilateralDebt(A -> B) = (Confirmed expense shares A owes B + Verified settlements B paid A)
-   *                       - (Confirmed expense shares B owes A + Verified settlements A paid B)
-   * Returns positive integer if debtor owes receiver, 0 or negative otherwise.
+   * Confirmed expense shares create directed liabilities. Verified settlements
+   * reduce only the same directed liability; remaining liabilities in the two
+   * directions are then netted for this pair. Suggested group transfers never
+   * participate in this calculation.
+   * Returns a positive integer if debtor owes receiver, 0 or negative otherwise.
    */
   async computeBilateralDebt(
     roomId: string | mongoose.Types.ObjectId,
