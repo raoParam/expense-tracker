@@ -65,6 +65,7 @@ export interface SendNotificationParams {
   body: string;
   data: Record<string, any>;
   channelId?: string;
+  categoryId?: string;
 }
 
 const EXPO_PUSH_API_URL = 'https://exp.host/--/api/v2/push/send';
@@ -427,7 +428,16 @@ export const PushNotificationService = {
    */
   async sendNotification(params: SendNotificationParams): Promise<void> {
     try {
-      const { recipientIds, dedupKeyPrefix, type, title, body, data, channelId = 'spendly-default' } = params;
+      const {
+        recipientIds,
+        dedupKeyPrefix,
+        type,
+        title,
+        body,
+        data,
+        channelId = 'spendly-default',
+        categoryId,
+      } = params;
 
       // Deduplicate recipient IDs
       const uniqueRecipients = Array.from(new Set(recipientIds.filter(Boolean)));
@@ -495,6 +505,7 @@ export const PushNotificationService = {
             title,
             body,
             data,
+            categoryId,
           });
         }
       }
@@ -618,11 +629,9 @@ export const PushNotificationService = {
 
     if (recipients.length === 0) return;
 
-    const rupeeStr = this.formatRupees(expense.amountPaise);
     const title = roomName || 'Spendly';
     const payerLabel = payerName || 'A roommate';
-    const expenseTitle = expense.title || 'Shared Expense';
-    const body = `${payerLabel} added "${expenseTitle}" (₹${rupeeStr}). Review and acknowledge or reject this expense.`;
+    const body = `${payerLabel} added a shared expense. Review and acknowledge or reject it.`;
 
     await this.sendNotification({
       recipientIds: recipients,
@@ -636,6 +645,7 @@ export const PushNotificationService = {
         expenseId: expense._id.toString(),
         revision: expense.revision,
       },
+      categoryId: 'expense_acknowledgement',
     });
   },
 
@@ -649,11 +659,9 @@ export const PushNotificationService = {
 
     if (recipients.length === 0) return;
 
-    const rupeeStr = this.formatRupees(expense.amountPaise);
     const title = roomName || 'Spendly';
     const payerLabel = payerName || 'A roommate';
-    const expenseTitle = expense.title || 'Shared Expense';
-    const body = `${payerLabel} updated and resubmitted "${expenseTitle}" (₹${rupeeStr}). Review and acknowledge or reject this expense.`;
+    const body = `${payerLabel} updated a shared expense. Review and acknowledge or reject it again.`;
 
     await this.sendNotification({
       recipientIds: recipients,
@@ -667,6 +675,7 @@ export const PushNotificationService = {
         expenseId: expense._id.toString(),
         revision: expense.revision,
       },
+      categoryId: 'expense_acknowledgement',
     });
   },
 

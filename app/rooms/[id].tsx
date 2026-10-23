@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useRef } from 'react';
+import { createThemedStyles } from '../../src/theme/themed-styles';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -33,10 +34,13 @@ import { useAuth } from '../../src/context/AuthContext';
 import { Card } from '../../src/components/Card';
 import { Button } from '../../src/components/Button';
 import { ConfirmationDialog } from '../../src/components/ConfirmationDialog';
+import { KeyboardComposerModal } from '../../src/components/KeyboardComposerModal';
 import { colors } from '../../src/theme/colors';
 import { spacing, radii } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
+import { KeyboardAwareScrollView } from '../../src/components/KeyboardAwareScrollView';
 import { paiseToRupees } from '../../src/domain/money';
+import { getSharedExpenseParticipation } from '../../src/domain/shared-expense-presentation';
 
 type RoomTab = 'expenses' | 'balances' | 'settlements' | 'members';
 
@@ -55,12 +59,16 @@ interface SettleUpTarget {
 }
 
 export default function RoomDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tab } = useLocalSearchParams<{ id: string; tab?: RoomTab }>();
   const router = useRouter();
   const { user } = useAuth();
   const { width: windowWidth } = useWindowDimensions();
 
-  const [activeTab, setActiveTab] = useState<RoomTab>('expenses');
+  const [activeTab, setActiveTab] = useState<RoomTab>(
+    tab && (tab === 'expenses' || tab === 'balances' || tab === 'settlements' || tab === 'members')
+      ? tab
+      : 'expenses'
+  );
   const [containerWidth, setContainerWidth] = useState<number>(windowWidth || 360);
 
   const pagerRef = useRef<ScrollView>(null);
@@ -201,6 +209,15 @@ export default function RoomDetailScreen() {
     }
     scrollTabIntoView(index);
   };
+
+  useEffect(() => {
+    if (tab && (tab === 'expenses' || tab === 'balances' || tab === 'settlements' || tab === 'members')) {
+      const tabIndex = TABS.findIndex((t) => t.id === tab);
+      if (tabIndex >= 0) {
+        handleTabPress(tab as RoomTab, tabIndex);
+      }
+    }
+  }, [tab, containerWidth]);
 
   const handlePagerScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = e.nativeEvent.contentOffset.x;
@@ -408,8 +425,8 @@ export default function RoomDetailScreen() {
       ) : (
         expenses.map((exp) => {
           const isPayer = exp.payerId === user?.uid;
-          const userPart = exp.participants.find((p) => p.userId === user?.uid);
           const pendingCount = exp.participants.filter((p) => p.status === 'pending').length;
+          const participation = getSharedExpenseParticipation(exp, user?.uid);
 
           return (
             <TouchableOpacity
@@ -422,19 +439,30 @@ export default function RoomDetailScreen() {
                   <View style={styles.expenseTitleCol}>
                     <Text style={styles.expenseItemTitle}>{exp.title || 'Shared Expense'}</Text>
                     <Text style={styles.expenseItemPayer}>
-                      Paid by {isPayer ? 'You' : exp.participants.find((p) => p.userId === exp.payerId)?.displayName || 'Roommate'}
+                      {isPayer
+                        ? 'Paid by you'
+                        : `Paid by ${exp.participants.find((p) => p.userId === exp.payerId)?.displayName || 'Roommate'}`}
                     </Text>
                   </View>
 
                   <View style={styles.expenseAmountCol}>
                     <Text style={styles.expenseItemAmount}>₹{paiseToRupees(exp.amountPaise)}</Text>
-                    {userPart && (
+                    {!isPayer && participation.kind === 'participant' && (
                       <Text style={styles.expenseUserShare}>
-                        Your share: ₹{paiseToRupees(userPart.sharePaise)}
+                        {participation.involvementLabel}
                       </Text>
+                    )}
+                    {!isPayer && participation.kind === 'not-involved' && (
+                      <Text style={styles.expenseUserShare}>Not involved</Text>
                     )}
                   </View>
                 </View>
+
+                {participation.responseLabel ? (
+                  <Text style={styles.expenseAcknowledgement} accessibilityLabel={participation.responseLabel}>
+                    {participation.responseLabel}
+                  </Text>
+                ) : null}
 
                 <View style={styles.expenseItemFooter}>
                   <View
@@ -1169,53 +1197,23 @@ export default function RoomDetailScreen() {
         </View>
       </Modal>
 
-      {/* Rejection Reason Modal */}
-      <Modal
+      {/* Rejection Reason Composer Modal */}
+      <KeyboardComposerModal
         visible={Boolean(rejectingSettlementId)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setRejectingSettlementId(null)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Ionicons name="close-circle-outline" size={32} color={colors.danger} />
-              <Text style={styles.modalTitle}>Reject Repayment Request</Text>
-            </View>
-
-            <Text style={styles.modalDesc}>
-              Please provide a reason why this repayment request was not received or is incorrect.
-            </Text>
-
-            <TextInput
-              style={styles.reasonInput}
-              placeholder="e.g., Payment not received in bank account / incorrect amount"
-              placeholderTextColor={colors.textMuted}
-              value={rejectReason}
-              onChangeText={setRejectReason}
-              multiline
-              maxLength={300}
-            />
-
-            <View style={styles.modalActions}>
-              <Button
-                title="Confirm Reject"
-                variant="danger"
-                onPress={handleConfirmRejectSettlement}
-                loading={submittingReject}
-                style={styles.modalActionBtn}
-              />
-              <Button
-                title="Cancel"
-                onPress={() => setRejectingSettlementId(null)}
-                variant="outline"
-                disabled={submittingReject}
-                style={styles.modalActionBtn}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setRejectingSettlementId(null)}
+        title="Reject Repayment Request"
+        subtitle="Please provide a reason why this repayment request was not received or is incorrect."
+        icon={<Ionicons name="close-circle-outline" size={24} color={colors.danger} />}
+        placeholder="e.g., Payment not received in bank account / incorrect amount"
+        value={rejectReason}
+        onChangeText={setRejectReason}
+        maxLength={300}
+        submitLabel="Confirm Reject"
+        submitVariant="danger"
+        onSubmit={handleConfirmRejectSettlement}
+        submitting={submittingReject}
+        submitDisabled={!rejectReason.trim()}
+      />
 
       {/* Invite Code Modal */}
       <Modal
@@ -1289,7 +1287,7 @@ export default function RoomDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -1529,6 +1527,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
     marginTop: 1,
+  },
+  expenseAcknowledgement: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
+    marginTop: spacing.xs,
   },
   expenseItemFooter: {
     flexDirection: 'row',
@@ -2027,6 +2031,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
   },
+  modalKeyboardView: {
+    width: '100%',
+    flex: 1,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
   modalHeader: {
     alignItems: 'center',
     gap: spacing.xs,
@@ -2102,4 +2114,4 @@ const styles = StyleSheet.create({
   modalActionBtn: {
     flex: 1,
   },
-});
+}));

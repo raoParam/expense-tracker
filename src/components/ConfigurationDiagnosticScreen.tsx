@@ -1,7 +1,9 @@
+import { createThemedStyles } from '../theme/themed-styles';
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { colors } from '../theme/colors';
 
 interface Props {
   message?: string | null;
@@ -10,7 +12,7 @@ interface Props {
 export const ConfigurationDiagnosticScreen: React.FC<Props> = ({ message }) => {
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.badgeContainer}>
           <Text style={styles.badgeIcon}>⚠️</Text>
@@ -54,10 +56,10 @@ export const ConfigurationDiagnosticScreen: React.FC<Props> = ({ message }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.background,
   },
   content: {
     padding: 24,
@@ -69,9 +71,9 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    backgroundColor: colors.warningLight,
     borderWidth: 1,
-    borderColor: '#F59E0B',
+    borderColor: colors.warning,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
@@ -82,69 +84,69 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: colors.textPrimary,
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: '#94A3B8',
+    color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24,
   },
   card: {
     width: '100%',
-    backgroundColor: '#1E293B',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: colors.border,
     marginBottom: 24,
   },
   cardHeader: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#F59E0B',
+    color: colors.warning,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
   },
   errorText: {
     fontSize: 14,
-    color: '#F8FAFC',
+    color: colors.textPrimary,
     lineHeight: 20,
   },
   divider: {
     height: 1,
-    backgroundColor: '#334155',
+    backgroundColor: colors.borderSubtle,
     marginVertical: 16,
   },
   sectionHeader: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#F8FAFC',
+    color: colors.textPrimary,
     marginBottom: 10,
   },
   step: {
     fontSize: 13,
-    color: '#CBD5E1',
+    color: colors.textSecondary,
     lineHeight: 20,
     marginBottom: 8,
   },
   stepBold: {
     fontWeight: '600',
-    color: '#F8FAFC',
+    color: colors.textPrimary,
   },
   codeText: {
     fontFamily: 'monospace',
-    color: '#38BDF8',
-    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    color: colors.info,
+    backgroundColor: colors.infoLight,
   },
   footerText: {
     fontSize: 12,
-    color: '#64748B',
+    color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 18,
   },
-});
+}));

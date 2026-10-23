@@ -1,3 +1,4 @@
+import { createThemedStyles } from '../theme/themed-styles';
 import React from 'react';
 import {
   View,
@@ -22,16 +23,21 @@ export interface FormFieldProps extends TextInputProps {
   suffix?: React.ReactNode;
 }
 
-export function FormField({
-  label,
-  error,
-  helperText,
-  containerStyle,
-  inputStyle,
-  prefix,
-  suffix,
-  ...inputProps
-}: FormFieldProps) {
+export const FormField = React.forwardRef<TextInput, FormFieldProps>(function FormField(
+  {
+    label,
+    error,
+    helperText,
+    containerStyle,
+    inputStyle,
+    prefix,
+    suffix,
+    onFocus,
+    onBlur,
+    ...inputProps
+  },
+  ref
+) {
   const [isFocused, setIsFocused] = React.useState(false);
 
   return (
@@ -47,10 +53,17 @@ export function FormField({
       >
         {prefix}
         <TextInput
+          ref={ref}
           style={[styles.input, inputStyle]}
           placeholderTextColor={colors.textMuted}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
+          onFocus={(event) => {
+            setIsFocused(true);
+            onFocus?.(event);
+          }}
+          onBlur={(event) => {
+            setIsFocused(false);
+            onBlur?.(event);
+          }}
           {...inputProps}
         />
         {suffix}
@@ -63,9 +76,9 @@ export function FormField({
       ) : null}
     </View>
   );
-}
+});
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     marginBottom: spacing.lg,
   },
@@ -108,4 +121,4 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.xs,
   },
-});
+}));

@@ -1,3 +1,4 @@
+import { createThemedStyles } from '../theme/themed-styles';
 import React from 'react';
 import {
   Modal,
@@ -97,7 +98,7 @@ export function NotificationPermissionModal({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -180,4 +181,4 @@ const styles = StyleSheet.create({
   dismissBtn: {
     width: '100%',
   },
-});
+}));

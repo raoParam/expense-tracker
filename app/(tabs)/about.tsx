@@ -1,3 +1,4 @@
+import { createThemedStyles } from '../../src/theme/themed-styles';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -18,12 +19,14 @@ import { useAuth } from '../../src/context/AuthContext';
 import { Card } from '../../src/components/Card';
 import { Button } from '../../src/components/Button';
 import { ConfirmationDialog } from '../../src/components/ConfirmationDialog';
+import { KeyboardComposerModal } from '../../src/components/KeyboardComposerModal';
 import { colors } from '../../src/theme/colors';
 import { spacing, radii } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
 import { NotificationService } from '../../src/services/notification-service';
 import { SQLitePersonalExpenseRepository } from '../../src/repositories/personal-expense-repository';
 import { BackupService, ImportPreview } from '../../src/services/backup-service';
+import { KeyboardAwareScrollView } from '../../src/components/KeyboardAwareScrollView';
 
 export default function AboutScreen() {
   const router = useRouter();
@@ -414,55 +417,22 @@ export default function AboutScreen() {
         onCancel={() => setLogoutDialogVisible(false)}
       />
 
-      {/* Paste Backup JSON Modal */}
-      <Modal
+      {/* Paste Backup JSON Composer Modal */}
+      <KeyboardComposerModal
         visible={pasteModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPasteModalVisible(false)}
-      >
-        <TouchableWithoutFeedback onPress={() => setPasteModalVisible(false)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Paste Backup JSON</Text>
-                  <TouchableOpacity onPress={() => setPasteModalVisible(false)}>
-                    <Ionicons name="close" size={24} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.modalSub}>
-                  Paste the JSON content from your exported Spendly personal backup file below:
-                </Text>
-                <TextInput
-                  style={styles.pasteInput}
-                  multiline
-                  numberOfLines={8}
-                  placeholder='{"version": 1, "dataType": "personal_expenses", ...}'
-                  placeholderTextColor={colors.textMuted}
-                  value={pastedJson}
-                  onChangeText={setPastedJson}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                <View style={styles.modalBtnRow}>
-                  <Button
-                    title="Cancel"
-                    variant="outline"
-                    onPress={() => setPasteModalVisible(false)}
-                    style={styles.modalBtn}
-                  />
-                  <Button
-                    title="Validate & Review"
-                    onPress={handleConfirmPaste}
-                    style={styles.modalBtn}
-                  />
-                </View>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+        onClose={() => setPasteModalVisible(false)}
+        title="Paste Backup JSON"
+        subtitle="Paste the JSON content from your exported Spendly personal backup file below:"
+        placeholder='{"version": 1, "dataType": "personal_expenses", ...}'
+        value={pastedJson}
+        onChangeText={setPastedJson}
+        submitLabel="Validate & Review"
+        onSubmit={handleConfirmPaste}
+        submitDisabled={!pastedJson.trim()}
+        autoCapitalize="none"
+        autoCorrect={false}
+        numberOfLines={6}
+      />
 
       {/* Import Confirmation Dialog */}
       <ConfirmationDialog
@@ -483,7 +453,7 @@ export default function AboutScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -687,20 +657,20 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
   },
   statusPillActive: {
-    backgroundColor: '#DCFCE7',
+    backgroundColor: colors.successLight,
   },
   statusPillInactive: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: colors.surfaceSubtle,
   },
   statusPillText: {
     fontSize: 11,
     fontWeight: '600',
   },
   statusPillTextActive: {
-    color: '#15803D',
+    color: colors.successText,
   },
   statusPillTextInactive: {
-    color: '#64748B',
+    color: colors.textSecondary,
   },
   notifDesc: {
     ...typography.caption,
@@ -758,6 +728,14 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
   },
+  modalKeyboardView: {
+    width: '100%',
+    flex: 1,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -794,4 +772,4 @@ const styles = StyleSheet.create({
   modalBtn: {
     flex: 1,
   },
-});
+}));

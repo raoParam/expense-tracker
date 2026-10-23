@@ -63,6 +63,34 @@ export async function loginWithEmail(
   };
 }
 
+/**
+ * Update the authenticated Firebase profile and return the same profile shape
+ * used by AuthContext. Firebase is the source of truth for account identity;
+ * refreshing the ID token keeps the display name available to backend calls.
+ */
+export async function updateDisplayName(displayName: string): Promise<UserProfile> {
+  if (!auth?.currentUser) {
+    throw new Error('You must be signed in to update your profile.');
+  }
+
+  const trimmedName = displayName.trim();
+  if (!trimmedName) {
+    throw new Error('Display name cannot be empty.');
+  }
+  if (trimmedName.length > 32) {
+    throw new Error('Display name cannot exceed 32 characters.');
+  }
+
+  await updateProfile(auth.currentUser, { displayName: trimmedName });
+  await auth.currentUser.getIdToken(true);
+
+  return {
+    uid: auth.currentUser.uid,
+    email: auth.currentUser.email,
+    displayName: auth.currentUser.displayName || trimmedName,
+  };
+}
+
 export async function logoutUser(): Promise<void> {
   if (!auth) return;
   await signOut(auth);

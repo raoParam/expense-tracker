@@ -1,7 +1,9 @@
+import { createThemedStyles } from '../theme/themed-styles';
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { AmountText } from './AmountText';
 import { colors } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import { spacing, radii } from '../theme/spacing';
 import { typography } from '../theme/typography';
 
@@ -18,6 +20,8 @@ export function SummaryCard({
   totalPaise,
   count,
 }: SummaryCardProps) {
+  useTheme();
+
   return (
     <View style={styles.container}>
       <View style={styles.headerRow}>
@@ -29,7 +33,7 @@ export function SummaryCard({
         <AmountText
           amountPaise={totalPaise}
           variant="hero"
-          color={colors.textInverse}
+          color={colors.summaryText}
         />
       </View>
 
@@ -45,7 +49,7 @@ export function SummaryCard({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     backgroundColor: colors.primaryDark,
     borderRadius: radii.xl,
@@ -65,12 +69,12 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.sectionTitle,
-    color: colors.primaryMuted,
+    color: colors.summaryMuted,
     letterSpacing: 1,
   },
   subtitle: {
     ...typography.caption,
-    color: colors.primaryLight,
+    color: colors.summaryMuted,
   },
   amountRow: {
     marginVertical: spacing.xs,
@@ -82,22 +86,22 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    borderTopColor: colors.summaryBorder,
   },
   badge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: colors.summaryBadge,
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 3,
     borderRadius: radii.full,
   },
   badgeText: {
     ...typography.caption,
-    color: colors.textInverse,
+    color: colors.summaryText,
     fontWeight: '600',
   },
   storageNote: {
     ...typography.caption,
-    color: colors.primaryMuted,
+    color: colors.summaryMuted,
     fontSize: 11,
   },
-});
+}));

@@ -1,3 +1,4 @@
+import { createThemedStyles } from '../theme/themed-styles';
 import React from 'react';
 import {
   TouchableOpacity,
@@ -20,6 +21,8 @@ export interface ButtonProps {
   style?: ViewStyle;
   textStyle?: TextStyle;
   icon?: React.ReactNode;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 export function Button({
@@ -31,6 +34,8 @@ export function Button({
   style,
   textStyle,
   icon,
+  accessibilityLabel,
+  accessibilityHint,
 }: ButtonProps) {
   const getContainerStyle = (): ViewStyle => {
     switch (variant) {
@@ -64,6 +69,10 @@ export function Button({
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || title}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
       activeOpacity={0.75}
       style={[
         styles.baseContainer,
@@ -97,7 +106,7 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   baseContainer: {
     minHeight: 48,
     flexDirection: 'row',
@@ -111,7 +120,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   secondaryContainer: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.secondaryBackground,
+    borderWidth: 1,
+    borderColor: colors.secondaryBorder,
   },
   outlineContainer: {
     backgroundColor: 'transparent',
@@ -132,7 +143,7 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
   },
   secondaryText: {
-    color: colors.primaryDark,
+    color: colors.secondaryText,
   },
   outlineText: {
     color: colors.textPrimary,
@@ -146,4 +157,4 @@ const styles = StyleSheet.create({
   textWithIcon: {
     marginLeft: spacing.sm,
   },
-});
+}));

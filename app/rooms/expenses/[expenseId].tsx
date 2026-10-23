@@ -1,3 +1,4 @@
+import { createThemedStyles } from '../../../src/theme/themed-styles';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -10,8 +11,6 @@ import {
   TextInput,
   TouchableOpacity,
   RefreshControl,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,11 +20,13 @@ import { Card } from '../../../src/components/Card';
 import { Button } from '../../../src/components/Button';
 import { FormField } from '../../../src/components/FormField';
 import { ConfirmationDialog } from '../../../src/components/ConfirmationDialog';
+import { KeyboardComposerModal } from '../../../src/components/KeyboardComposerModal';
 import { colors } from '../../../src/theme/colors';
 import { spacing, radii } from '../../../src/theme/spacing';
 import { typography } from '../../../src/theme/typography';
 import { validateRupeeInput, rupeesToPaise, paiseToRupees } from '../../../src/domain/money';
 import { LIMITS } from '../../../src/constants/limits';
+import { KeyboardAwareScrollView } from '../../../src/components/KeyboardAwareScrollView';
 import { SplitType, SplitParticipantInput, calculateClientShares } from '../../../src/domain/split';
 
 export default function SharedExpenseDetailScreen() {
@@ -551,53 +552,28 @@ export default function SharedExpenseDetailScreen() {
       )}
 
       {/* Reject Modal */}
-      <Modal
+      <KeyboardComposerModal
         visible={rejectModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setRejectModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Ionicons name="close-circle-outline" size={28} color={colors.danger} />
-              <Text style={styles.modalTitle}>Reject Expense Share</Text>
-            </View>
+        onClose={() => {
+          if (!actionLoading) {
+            setRejectModalVisible(false);
+            setRejectReason('');
+          }
+        }}
+        title="Reject Expense Share"
+        subtitle="Please provide feedback explaining why you are rejecting (e.g. incorrect split, wasn't present, wrong amount)."
+        icon={<Ionicons name="close-circle-outline" size={24} color={colors.danger} />}
+        placeholder="Enter rejection reason (at least 3 characters)..."
+        value={rejectReason}
+        onChangeText={setRejectReason}
+        maxLength={300}
+        submitLabel="Submit Rejection"
+        submitVariant="danger"
+        onSubmit={handleConfirmReject}
+        submitting={actionLoading}
+        submitDisabled={rejectReason.trim().length < 3}
+      />
 
-            <Text style={styles.modalDesc}>
-              Please provide feedback explaining why you are rejecting (e.g. incorrect split, wasn't present, wrong amount).
-            </Text>
-
-            <TextInput
-              style={styles.reasonInput}
-              placeholder="Enter rejection reason (at least 3 characters)..."
-              value={rejectReason}
-              onChangeText={setRejectReason}
-              multiline
-              numberOfLines={3}
-            />
-
-            <View style={styles.modalActions}>
-              <Button
-                title="Submit Rejection"
-                onPress={handleConfirmReject}
-                loading={actionLoading}
-                variant="danger"
-                style={styles.modalActionBtn}
-              />
-              <Button
-                title="Cancel"
-                onPress={() => {
-                  setRejectModalVisible(false);
-                  setRejectReason('');
-                }}
-                variant="outline"
-                style={styles.modalActionBtn}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* Edit & Resubmit Modal */}
       <Modal
@@ -606,9 +582,9 @@ export default function SharedExpenseDetailScreen() {
         presentationStyle="pageSheet"
         onRequestClose={() => setResubmitModalVisible(false)}
       >
-        <KeyboardAvoidingView
-          style={styles.resubmitKeyboardView}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        <KeyboardAwareScrollView
+          containerStyle={styles.resubmitKeyboardView}
+          contentContainerStyle={styles.resubmitContent}
         >
           <View style={styles.resubmitHeaderBar}>
             <Text style={styles.resubmitHeaderTitle}>
@@ -619,7 +595,7 @@ export default function SharedExpenseDetailScreen() {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.resubmitScroll} contentContainerStyle={styles.resubmitContent}>
+          <View>
             {resubmitErrorMessage ? (
               <View style={styles.resubmitErrorBanner}>
                 <Ionicons name="alert-circle" size={20} color={colors.danger} />
@@ -708,6 +684,7 @@ export default function SharedExpenseDetailScreen() {
                         <TextInput
                           style={styles.splitTextInput}
                           placeholder="0.00"
+                          placeholderTextColor={colors.textMuted}
                           keyboardType="decimal-pad"
                           value={p.amountRupees}
                           onChangeText={(val) => updateResubmitParticipantField(p.userId, 'amountRupees', val)}
@@ -721,6 +698,7 @@ export default function SharedExpenseDetailScreen() {
                         <TextInput
                           style={styles.splitTextInput}
                           placeholder="0.00"
+                          placeholderTextColor={colors.textMuted}
                           keyboardType="decimal-pad"
                           value={p.percentage}
                           onChangeText={(val) => updateResubmitParticipantField(p.userId, 'percentage', val)}
@@ -735,6 +713,7 @@ export default function SharedExpenseDetailScreen() {
                           <TextInput
                             style={styles.splitTextInput}
                             placeholder="1"
+                            placeholderTextColor={colors.textMuted}
                             keyboardType="number-pad"
                             value={p.quantity}
                             onChangeText={(val) => updateResubmitParticipantField(p.userId, 'quantity', val)}
@@ -745,6 +724,7 @@ export default function SharedExpenseDetailScreen() {
                           <TextInput
                             style={styles.splitTextInput}
                             placeholder="0.00"
+                            placeholderTextColor={colors.textMuted}
                             keyboardType="decimal-pad"
                             value={p.unitPriceRupees}
                             onChangeText={(val) => updateResubmitParticipantField(p.userId, 'unitPriceRupees', val)}
@@ -782,8 +762,8 @@ export default function SharedExpenseDetailScreen() {
               loading={resubmitSubmitting}
               style={styles.submitResubmitBtn}
             />
-          </ScrollView>
-        </KeyboardAvoidingView>
+          </View>
+        </KeyboardAwareScrollView>
       </Modal>
 
       {/* Cancel Confirmation Dialog */}
@@ -801,7 +781,7 @@ export default function SharedExpenseDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -1146,6 +1126,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
   },
+  modalKeyboardView: {
+    width: '100%',
+    flex: 1,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1355,4 +1343,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     marginBottom: spacing.xl,
   },
-});
+}));

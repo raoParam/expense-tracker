@@ -1,3 +1,4 @@
+import { createThemedStyles } from '../theme/themed-styles';
 import React from 'react';
 import {
   View,
@@ -73,7 +74,7 @@ export function CategoryPicker({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     marginBottom: spacing.lg,
   },
@@ -116,4 +117,4 @@ const styles = StyleSheet.create({
     color: colors.danger,
     marginTop: spacing.xs,
   },
-});
+}));

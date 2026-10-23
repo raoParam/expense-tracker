@@ -250,8 +250,21 @@ export const ExpenseService = {
       throw new AppError('You are not a participant in this expense', 403, 'NOT_EXPENSE_PARTICIPANT');
     }
 
+    if (participant.userId === expense.payerId) {
+      if (participant.status === 'acknowledged') return expense;
+      throw new AppError('The creator/payer does not acknowledge their own expense', 400, 'CREATOR_CANNOT_ACKNOWLEDGE');
+    }
+
     if (participant.status === 'acknowledged') {
       return expense; // Idempotent success
+    }
+
+    if (participant.status === 'rejected') {
+      throw new AppError(
+        'You have already responded to this expense. The payer must resubmit it before you can respond again.',
+        409,
+        'EXPENSE_ALREADY_RESPONDED'
+      );
     }
 
     // Atomically set participant status while revision and status match
@@ -405,6 +418,18 @@ export const ExpenseService = {
 
     if (participant.userId === expense.payerId) {
       throw new AppError('The creator/payer cannot reject their own expense', 400, 'CREATOR_CANNOT_REJECT');
+    }
+
+    if (participant.status === 'rejected') {
+      return expense; // Idempotent duplicate notification action.
+    }
+
+    if (participant.status === 'acknowledged') {
+      throw new AppError(
+        'You have already acknowledged this expense and cannot reject it unless it is resubmitted.',
+        409,
+        'EXPENSE_ALREADY_RESPONDED'
+      );
     }
 
     // Atomically update participant rejection

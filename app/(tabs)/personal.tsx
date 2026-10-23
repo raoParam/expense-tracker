@@ -1,3 +1,4 @@
+import { createThemedStyles } from '../../src/theme/themed-styles';
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
@@ -226,7 +227,7 @@ export default function PersonalExpensesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -347,4 +348,4 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 6,
   },
-});
+}));

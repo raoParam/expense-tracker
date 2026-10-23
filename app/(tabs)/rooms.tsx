@@ -1,3 +1,4 @@
+import { createThemedStyles } from '../../src/theme/themed-styles';
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -249,7 +250,7 @@ export default function RoomsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -478,4 +479,4 @@ const styles = StyleSheet.create({
   arrowIcon: {
     marginLeft: 'auto',
   },
-});
+}));

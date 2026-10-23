@@ -4,6 +4,7 @@ import {
   subscribeToAuthChanges,
   loginWithEmail,
   registerWithEmail,
+  updateDisplayName as updateDisplayNameInFirebase,
   logoutUser,
   getCurrentUserToken,
   getCurrentUser,
@@ -16,6 +17,7 @@ export interface AuthContextType {
   error: string | null;
   login: (email: string, pass: string) => Promise<void>;
   register: (email: string, pass: string, displayName?: string) => Promise<void>;
+  updateDisplayName: (displayName: string) => Promise<void>;
   logout: () => Promise<void>;
   getToken: (forceRefresh?: boolean) => Promise<string | null>;
   clearError: () => void;
@@ -97,6 +99,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateDisplayName = async (displayName: string) => {
+    setError(null);
+    setLoading(true);
+    try {
+      const updatedUser = await updateDisplayNameInFirebase(displayName);
+      setUser(updatedUser);
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to update your display name.';
+      setError(msg);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getToken = async (forceRefresh = false) => {
     return getCurrentUserToken(forceRefresh);
   };
@@ -111,6 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         error,
         login,
         register,
+        updateDisplayName,
         logout,
         getToken,
         clearError,

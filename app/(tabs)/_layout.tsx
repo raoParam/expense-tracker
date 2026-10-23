@@ -82,18 +82,24 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="about"
+        name="profile"
         options={{
-          title: 'About',
-          tabBarLabel: 'About',
-          headerTitle: 'About & Privacy',
+          title: 'Profile',
+          tabBarLabel: 'Profile',
+          headerTitle: 'Profile & Settings',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? 'information-circle' : 'information-circle-outline'}
+              name={focused ? 'person-circle' : 'person-circle-outline'}
               size={22}
               color={color}
             />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="about"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

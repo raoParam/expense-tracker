@@ -2,7 +2,8 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
 } from 'firebase/auth';
-import { registerWithEmail } from '../src/services/auth-service';
+import { registerWithEmail, updateDisplayName } from '../src/services/auth-service';
+import { auth } from '../src/services/firebase';
 
 // Mock firebase/auth
 jest.mock('firebase/auth', () => ({
@@ -91,5 +92,41 @@ describe('auth-service registration regression tests', () => {
     expect(updateProfile).not.toHaveBeenCalled();
     expect(mockGetIdToken).not.toHaveBeenCalled();
     expect(profile.displayName).toBeNull();
+  });
+
+  test('updateDisplayName persists through Firebase and force-refreshes the token', async () => {
+    const mockGetIdToken = jest.fn().mockResolvedValue('fresh-token');
+    const mockUser = {
+      uid: 'user-edit-123',
+      email: 'edit@hostel.edu',
+      displayName: 'Old Name',
+      getIdToken: mockGetIdToken,
+    };
+    (auth as any).currentUser = mockUser;
+    (updateProfile as jest.Mock).mockImplementation(async (_user, profile) => {
+      mockUser.displayName = profile.displayName;
+    });
+
+    await expect(updateDisplayName('  New Name  ')).resolves.toEqual({
+      uid: 'user-edit-123',
+      email: 'edit@hostel.edu',
+      displayName: 'New Name',
+    });
+    expect(updateProfile).toHaveBeenCalledWith(mockUser, { displayName: 'New Name' });
+    expect(mockGetIdToken).toHaveBeenCalledWith(true);
+  });
+
+  test('updateDisplayName rejects guest edits and invalid names', async () => {
+    (auth as any).currentUser = null;
+    await expect(updateDisplayName('Name')).rejects.toThrow('signed in');
+
+    (auth as any).currentUser = {
+      uid: 'user-edit-456',
+      email: 'edit2@hostel.edu',
+      displayName: 'Name',
+      getIdToken: jest.fn(),
+    };
+    await expect(updateDisplayName('   ')).rejects.toThrow('cannot be empty');
+    await expect(updateDisplayName('x'.repeat(33))).rejects.toThrow('32 characters');
   });
 });

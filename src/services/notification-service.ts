@@ -3,11 +3,13 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiRequest } from './api-client';
+import { EXPENSE_ACKNOWLEDGEMENT_CATEGORY_ID } from './notification-actions';
 
 export const NOTIFICATION_STORAGE_KEYS = {
   PROMPT_COMPLETED: '@spendly/notification_prompt_completed',
   DEVICE_TOKEN: '@spendly/device_push_token',
   REGISTERED_USER_ID: '@spendly/registered_user_id',
+  LAST_NOTIFIED_UPDATE_ID: '@spendly/last_notified_update_id',
 };
 
 export const NOTIFICATION_CHANNEL_ID = 'spendly-default';
@@ -45,6 +47,31 @@ export const NotificationService = {
         enableVibrate: true,
         showBadge: true,
       });
+    }
+  },
+
+  /** Register response actions in JS so already-installed builds can receive
+   * acknowledgement controls without changing the Android application ID. */
+  async configureExpenseActions(): Promise<void> {
+    try {
+      await Notifications.setNotificationCategoryAsync(EXPENSE_ACKNOWLEDGEMENT_CATEGORY_ID, [
+        {
+          identifier: 'expense_acknowledge',
+          buttonTitle: 'Acknowledge',
+          options: { opensAppToForeground: true },
+        },
+        {
+          identifier: 'expense_reject',
+          buttonTitle: 'Reject',
+          textInput: {
+            submitButtonTitle: 'Reject',
+            placeholder: 'Reason (required)',
+          },
+          options: { opensAppToForeground: true, isDestructive: true },
+        },
+      ]);
+    } catch (err: any) {
+      console.warn('[NotificationService] Expense notification actions unavailable:', err?.message);
     }
   },
 
@@ -227,18 +254,82 @@ export const NotificationService = {
   },
 
   /**
+   * Schedule a local notification when an applicable OTA update is ready,
+   * describing only the missing features/fixes and deduplicating by updateId.
+   */
+  async notifyUpdateAvailable(
+    updateId: string,
+    notes: string[] = [],
+    releaseTitle?: string
+  ): Promise<boolean> {
+    if (!updateId) return false;
+
+    try {
+      const lastNotified = await AsyncStorage.getItem(
+        NOTIFICATION_STORAGE_KEYS.LAST_NOTIFIED_UPDATE_ID
+      );
+      if (lastNotified === updateId) {
+        return false;
+      }
+
+      await this.configureChannel();
+
+      const summary =
+        notes.length > 0
+          ? notes.slice(0, 2).join(' • ')
+          : 'Bug fixes and performance improvements.';
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: releaseTitle || 'New Update Available',
+          body: summary,
+          data: {
+            type: 'APP_UPDATE',
+            updateId,
+          },
+        },
+        trigger: null,
+      });
+
+      await AsyncStorage.setItem(
+        NOTIFICATION_STORAGE_KEYS.LAST_NOTIFIED_UPDATE_ID,
+        updateId
+      );
+      return true;
+    } catch (err: any) {
+      console.warn('[NotificationService] Failed to notify update available:', err?.message);
+      return false;
+    }
+  },
+
+  /**
    * Parse notification payload into app navigation target
    */
   resolveNavigationTarget(notificationData: any): NotificationNavigationTarget | null {
     if (!notificationData) return null;
 
-    const { expenseId, roomId } = notificationData;
+    const { expenseId, roomId, settlementId, type } = notificationData;
+
+    if (type === 'APP_UPDATE') {
+      return {
+        route: '/(tabs)',
+        params: { showUpdate: 'true' },
+      };
+    }
 
     // Route directly to expense detail / acknowledgement screen if expenseId is present
     if (expenseId) {
       return {
         route: `/rooms/expenses/${expenseId}`,
         params: roomId ? { roomId } : undefined,
+      };
+    }
+
+    // Route directly to room settlement tab if settlementId is present
+    if (settlementId && roomId) {
+      return {
+        route: `/rooms/${roomId}`,
+        params: { tab: 'settlements', settlementId },
       };
     }
 

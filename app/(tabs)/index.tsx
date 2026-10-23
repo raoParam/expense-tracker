@@ -1,3 +1,4 @@
+import { createThemedStyles } from '../../src/theme/themed-styles';
 import React, { useState, useCallback } from 'react';
 import {
   View,
@@ -102,7 +103,7 @@ export default function HomeScreen() {
           title="View All"
           onPress={() => router.push('/(tabs)/personal')}
           variant="secondary"
-          icon={<Ionicons name="list-outline" size={18} color={colors.primaryDark} />}
+          icon={<Ionicons name="list-outline" size={18} color={colors.secondaryText} />}
           style={styles.actionButton}
         />
       </View>
@@ -161,7 +162,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -210,4 +211,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.xs,
   },
-});
+}));

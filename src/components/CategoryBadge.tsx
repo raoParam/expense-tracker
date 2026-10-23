@@ -1,3 +1,4 @@
+import { createThemedStyles } from '../theme/themed-styles';
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,7 +53,7 @@ export function CategoryBadge({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -76,4 +77,4 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
   },
-});
+}));

@@ -1,7 +1,7 @@
 import { TextStyle } from 'react-native';
-import { colors } from './colors';
+import { colors, getColorTheme } from './colors';
 
-export const typography = {
+const createTypography = () => ({
   h1: {
     fontSize: 28,
     fontWeight: '700',
@@ -82,4 +82,18 @@ export const typography = {
     lineHeight: 18,
     color: colors.textPrimary,
   } as TextStyle,
-} as const;
+} as const);
+
+let cachedTheme: 'light' | 'dark' | undefined;
+let cachedTypography: ReturnType<typeof createTypography> | undefined;
+
+export const typography = new Proxy({} as ReturnType<typeof createTypography>, {
+  get(_target, property: string | symbol) {
+    const theme = getColorTheme();
+    if (!cachedTypography || cachedTheme !== theme) {
+      cachedTheme = theme;
+      cachedTypography = createTypography();
+    }
+    return cachedTypography[property as keyof typeof cachedTypography];
+  },
+});

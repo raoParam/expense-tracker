@@ -1,12 +1,11 @@
+import { createThemedStyles } from '../../src/theme/themed-styles';
 import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
+  TextInput,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,12 +16,14 @@ import { Card } from '../../src/components/Card';
 import { colors } from '../../src/theme/colors';
 import { spacing } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
+import { KeyboardAwareScrollView } from '../../src/components/KeyboardAwareScrollView';
 
 export default function CreateRoomScreen() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const descRef = React.useRef<TextInput>(null);
 
   const handleCreate = async () => {
     const trimmed = name.trim();
@@ -49,11 +50,10 @@ export default function CreateRoomScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <KeyboardAwareScrollView
+      containerStyle={styles.container}
+      contentContainerStyle={styles.content}
     >
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.headerBox}>
           <View style={styles.iconCircle}>
             <Ionicons name="home" size={28} color={colors.primary} />
@@ -68,6 +68,9 @@ export default function CreateRoomScreen() {
           <FormField
             label="Room Name"
             placeholder="e.g. Room 302 — Ganga Hostel"
+            returnKeyType="next"
+            onSubmitEditing={() => descRef.current?.focus()}
+            blurOnSubmit={false}
             value={name}
             onChangeText={(text) => {
               setName(text);
@@ -79,6 +82,7 @@ export default function CreateRoomScreen() {
           />
 
           <FormField
+            ref={descRef}
             label="Description / Notes (Optional, max 200 chars)"
             placeholder="e.g. 3rd floor wing, Spring semester 2026"
             value={description}
@@ -104,12 +108,11 @@ export default function CreateRoomScreen() {
             style={styles.submitBtn}
           />
         </Card>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -170,4 +173,4 @@ const styles = StyleSheet.create({
   submitBtn: {
     marginTop: spacing.xs,
   },
-});
+}));

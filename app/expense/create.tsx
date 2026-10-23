@@ -1,12 +1,11 @@
+import { createThemedStyles } from '../../src/theme/themed-styles';
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
+  TextInput,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -25,6 +24,7 @@ import { Card } from '../../src/components/Card';
 import { colors } from '../../src/theme/colors';
 import { spacing, radii } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
+import { KeyboardAwareScrollView } from '../../src/components/KeyboardAwareScrollView';
 
 export default function CreateExpenseScreen() {
   const db = useSQLiteContext();
@@ -39,6 +39,8 @@ export default function CreateExpenseScreen() {
   const [description, setDescription] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const titleRef = React.useRef<TextInput>(null);
+  const descRef = React.useRef<TextInput>(null);
 
   // Live amount conversion preview
   const liveValidation = validateRupeeInput(rupeeAmount);
@@ -79,11 +81,10 @@ export default function CreateExpenseScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <KeyboardAwareScrollView
+      containerStyle={styles.container}
+      contentContainerStyle={styles.content}
     >
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {/* Amount Input Section */}
         <Card style={styles.amountCard}>
           <Text style={styles.amountLabel}>AMOUNT IN RUPEES (INR)</Text>
@@ -141,8 +142,12 @@ export default function CreateExpenseScreen() {
 
         {/* Title Input */}
         <FormField
+          ref={titleRef}
           label={`Title (Optional, max ${LIMITS.MAX_TITLE_LENGTH} chars)`}
           placeholder="e.g. Mess monthly fee (defaults to category name)"
+          returnKeyType="next"
+          onSubmitEditing={() => descRef.current?.focus()}
+          blurOnSubmit={false}
           value={title}
           onChangeText={(val) => {
             setTitle(val);
@@ -155,6 +160,7 @@ export default function CreateExpenseScreen() {
 
         {/* Description / Notes */}
         <FormField
+          ref={descRef}
           label={`Description / Notes (Optional, max ${LIMITS.MAX_DESCRIPTION_LENGTH} chars)`}
           placeholder="Add extra details, bill remarks, etc."
           value={description}
@@ -186,12 +192,11 @@ export default function CreateExpenseScreen() {
             style={styles.saveButton}
           />
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -262,4 +267,4 @@ const styles = StyleSheet.create({
   saveButton: {
     flex: 2,
   },
-});
+}));

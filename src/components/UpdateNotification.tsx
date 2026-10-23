@@ -1,114 +1,215 @@
+import { createThemedStyles } from '../theme/themed-styles';
 import React, { useEffect, useReducer, useRef } from 'react';
 import {
-  Modal,
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableWithoutFeedback,
   ActivityIndicator,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableWithoutFeedback,
+  View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   checkAndFetchUpdate,
   fetchUpdateAsyncSafe,
+  getUpdateDisplayReleaseInfo,
   reloadAppAsync,
+  ReleaseNoteItem,
+  UpdateManifest,
   updateModalReducer,
   initialUpdateModalState,
 } from '../services/update-service';
+import {
+  abandonStagedUpdateInstallation,
+  stageUpdateInstallation,
+} from '../services/update-release-notes';
 import { Button } from './Button';
 import { colors } from '../theme/colors';
 import { spacing, radii } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import * as Notifications from 'expo-notifications';
+import { NotificationService } from '../services/notification-service';
+
+function formatPublishedAt(value?: string): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return `Published ${date.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })}`;
+}
 
 export function UpdateNotification() {
   const [state, dispatch] = useReducer(updateModalReducer, initialUpdateModalState);
   const insets = useSafeAreaInsets();
-  const isUpdatingRef = useRef(false);
+  const installRequestedRef = useRef(false);
   const isReloadingRef = useRef(false);
   const isFetchingRef = useRef(false);
+  const latestManifestRef = useRef<UpdateManifest | null>(null);
+  const latestNoteItemsRef = useRef<ReleaseNoteItem[]>([]);
+
+  const reloadDownloadedUpdate = React.useCallback(async (
+    manifestOverride?: UpdateManifest | null,
+    noteItemsOverride?: ReleaseNoteItem[]
+  ) => {
+    if (isReloadingRef.current) return;
+    isReloadingRef.current = true;
+    await stageUpdateInstallation(
+      manifestOverride || latestManifestRef.current,
+      noteItemsOverride || latestNoteItemsRef.current
+    );
+    const reloaded = await reloadAppAsync();
+    if (!reloaded) {
+      await abandonStagedUpdateInstallation();
+      isReloadingRef.current = false;
+      installRequestedRef.current = false;
+      dispatch({ type: 'UPDATE_ERROR', error: new Error('Could not apply the downloaded update.') });
+    }
+  }, []);
 
   useEffect(() => {
-    isUpdatingRef.current = state.status === 'updating';
-  }, [state.status]);
-
-  useEffect(() => {
-    // Non-blocking background update check on app launch
+    // This check is deliberately non-blocking. A downloaded update is never
+    // applied unless the user explicitly chooses Update now.
     checkAndFetchUpdate({
       onChecking: () => dispatch({ type: 'CHECKING' }),
-      onUpdateAvailable: (manifest) => dispatch({ type: 'UPDATE_AVAILABLE', manifest }),
+      onUpdateAvailable: async (manifest) => {
+        latestManifestRef.current = manifest;
+        const displayInfo = await getUpdateDisplayReleaseInfo(manifest);
+        latestNoteItemsRef.current = displayInfo.releaseNoteItems;
+        dispatch({ type: 'UPDATE_AVAILABLE', manifest, displayInfo });
+      },
       onDownloading: () => dispatch({ type: 'DOWNLOADING' }),
-      onUpdateReady: (manifest) => {
-        dispatch({ type: 'UPDATE_READY', manifest });
-        if (isUpdatingRef.current && !isReloadingRef.current) {
-          isReloadingRef.current = true;
-          reloadAppAsync();
+      onUpdateReady: async (manifest) => {
+        const readyManifest = manifest || latestManifestRef.current;
+        latestManifestRef.current = readyManifest;
+        const displayInfo = await getUpdateDisplayReleaseInfo(readyManifest);
+        latestNoteItemsRef.current = displayInfo.releaseNoteItems;
+        dispatch({ type: 'UPDATE_READY', manifest: readyManifest || undefined, displayInfo });
+        const updateId = readyManifest?.id || readyManifest?.updateId;
+        if (updateId) {
+          void NotificationService.notifyUpdateAvailable(
+            updateId,
+            displayInfo.notes,
+            displayInfo.title
+          );
+        }
+        if (installRequestedRef.current) {
+          void reloadDownloadedUpdate(readyManifest, displayInfo.releaseNoteItems);
         }
       },
-      onError: (error) => dispatch({ type: 'UPDATE_ERROR', error }),
+      onError: (error) => {
+        installRequestedRef.current = false;
+        dispatch({ type: 'UPDATE_ERROR', error });
+      },
     });
+  }, [reloadDownloadedUpdate]);
+
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener?.((response) => {
+      const data = response?.notification?.request?.content?.data;
+      if (data?.type === 'APP_UPDATE') {
+        dispatch({ type: 'SHOW_UPDATE_MODAL' });
+      }
+    });
+    return () => {
+      sub?.remove();
+    };
   }, []);
 
   const handleUpdateNow = async () => {
-    if (isReloadingRef.current) {
+    if (isReloadingRef.current) return;
+
+    if (state.status === 'ready') {
+      installRequestedRef.current = true;
+      dispatch({ type: 'USER_PRESS_UPDATE_NOW' });
+      await reloadDownloadedUpdate(state.manifest, state.releaseNoteItems);
       return;
     }
 
-    if (state.status === 'ready') {
-      isReloadingRef.current = true;
-      dispatch({ type: 'USER_PRESS_UPDATE_NOW' });
-      await reloadAppAsync();
-    } else if (state.status === 'error') {
-      if (isFetchingRef.current) {
-        return;
-      }
+    if (state.status === 'error') {
+      if (isFetchingRef.current) return;
       isFetchingRef.current = true;
+      installRequestedRef.current = true;
       dispatch({ type: 'RETRY' });
       try {
         await fetchUpdateAsyncSafe({
           onDownloading: () => dispatch({ type: 'DOWNLOADING' }),
-          onUpdateReady: () => {
-            dispatch({ type: 'UPDATE_READY' });
-            if (!isReloadingRef.current) {
-              isReloadingRef.current = true;
-              reloadAppAsync();
-            }
+          onUpdateReady: async (manifest) => {
+            const readyManifest = manifest || latestManifestRef.current || state.manifest;
+            latestManifestRef.current = readyManifest;
+            const displayInfo = await getUpdateDisplayReleaseInfo(readyManifest);
+            latestNoteItemsRef.current = displayInfo.releaseNoteItems;
+            dispatch({ type: 'UPDATE_READY', manifest: readyManifest || undefined, displayInfo });
+        const updateId = readyManifest?.id || readyManifest?.updateId;
+        if (updateId) {
+          void NotificationService.notifyUpdateAvailable(
+            updateId,
+            displayInfo.notes,
+            displayInfo.title
+          );
+        }
+            void reloadDownloadedUpdate(readyManifest, displayInfo.releaseNoteItems);
           },
-          onError: (err) => dispatch({ type: 'UPDATE_ERROR', error: err }),
+          onError: (error) => {
+            installRequestedRef.current = false;
+            dispatch({ type: 'UPDATE_ERROR', error });
+          },
         });
       } finally {
         isFetchingRef.current = false;
       }
-    } else {
-      // Still downloading: mark as updating so it reloads as soon as download completes
-      dispatch({ type: 'USER_PRESS_UPDATE_NOW' });
+      return;
     }
+
+    // The initial check downloads in the background. This marks the user's
+    // explicit choice so a reload can happen as soon as that download is ready.
+    installRequestedRef.current = true;
+    dispatch({ type: 'USER_PRESS_UPDATE_NOW' });
   };
 
   const handleLater = () => {
-    if (state.status === 'updating' || isReloadingRef.current) {
-      return; // Do not dismiss if reload is in progress
-    }
+    if (state.status === 'updating' || isReloadingRef.current) return;
+    installRequestedRef.current = false;
     dispatch({ type: 'USER_PRESS_LATER' });
   };
 
-  if (!state.visible || state.dismissed) {
-    return null;
-  }
+  if (!state.visible || state.dismissed) return null;
 
+  return (
+    <UpdateDialog
+      state={state}
+      insets={insets}
+      onUpdateNow={handleUpdateNow}
+      onLater={handleLater}
+    />
+  );
+}
+
+interface UpdateDialogProps {
+  state: ReturnType<typeof updateModalReducer>;
+  insets: ReturnType<typeof useSafeAreaInsets>;
+  onUpdateNow: () => void;
+  onLater: () => void;
+}
+
+function UpdateDialog({ state, insets, onUpdateNow, onLater }: UpdateDialogProps) {
   const isDownloading = state.status === 'downloading' || state.status === 'updating';
   const isUpdating = state.status === 'updating';
+  const publishedAt = formatPublishedAt(state.publishedAt);
 
   return (
     <Modal
       visible={state.visible}
       transparent
       animationType="fade"
-      onRequestClose={handleLater}
+      onRequestClose={onLater}
       statusBarTranslucent
     >
-      <TouchableWithoutFeedback onPress={handleLater}>
+      <TouchableWithoutFeedback onPress={onLater}>
         <View
           style={[
             styles.backdrop,
@@ -121,87 +222,19 @@ export function UpdateNotification() {
           ]}
         >
           <TouchableWithoutFeedback onPress={() => {}}>
-            <View style={styles.card}>
-              <ScrollView
-                style={styles.scrollArea}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-                bounces={false}
-              >
-                {/* Header Icon */}
-                <View style={styles.iconCircle}>
-                  <Ionicons name="cloud-download-outline" size={24} color={colors.primary} />
-                </View>
-
-                {/* Title & Description */}
-                <Text style={styles.title}>A new Spendly update is ready</Text>
-                <Text style={styles.description}>
-                  We've improved Spendly to make managing your expenses easier.
-                </Text>
-
-                {/* What's New Box */}
-                <View style={styles.whatsNewBox}>
-                  <Text style={styles.whatsNewHeader}>What's new</Text>
-                  <View style={styles.notesList}>
-                    {state.releaseNotes.map((note, index) => (
-                      <View key={index} style={styles.noteRow}>
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={16}
-                          color={colors.primary}
-                          style={styles.checkIcon}
-                        />
-                        <Text style={styles.noteText}>{note}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Error Banner if download failed */}
-                {state.errorMessage ? (
-                  <View style={styles.errorBox}>
-                    <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
-                    <Text style={styles.errorText}>
-                      Could not download update. Please check your connection and try again.
-                    </Text>
-                  </View>
-                ) : null}
-
-                {/* Background downloading indicator */}
-                {isDownloading && !isUpdating && !state.errorMessage ? (
-                  <View style={styles.downloadingBanner}>
-                    <ActivityIndicator size="small" color={colors.primary} />
-                    <Text style={styles.downloadingBannerText}>
-                      Downloading update in background...
-                    </Text>
-                  </View>
-                ) : null}
-              </ScrollView>
-
-              {/* Action Buttons */}
-              <View style={styles.buttonRow}>
-                <Button
-                  title="Later"
-                  variant="outline"
-                  onPress={handleLater}
-                  disabled={isUpdating}
-                  style={styles.button}
-                />
-                <Button
-                  title={
-                    isUpdating
-                      ? 'Downloading...'
-                      : state.errorMessage
-                      ? 'Retry'
-                      : 'Update now'
-                  }
-                  variant="primary"
-                  onPress={handleUpdateNow}
-                  loading={isUpdating}
-                  disabled={isUpdating}
-                  style={styles.button}
-                />
-              </View>
+            <View style={styles.card} accessibilityViewIsModal>
+              <UpdateDetails
+                state={state}
+                isDownloading={isDownloading}
+                isUpdating={isUpdating}
+                publishedAt={publishedAt}
+              />
+              <UpdateActions
+                hasError={Boolean(state.errorMessage)}
+                isUpdating={isUpdating}
+                onUpdateNow={onUpdateNow}
+                onLater={onLater}
+              />
             </View>
           </TouchableWithoutFeedback>
         </View>
@@ -210,7 +243,119 @@ export function UpdateNotification() {
   );
 }
 
-const styles = StyleSheet.create({
+interface UpdateDetailsProps {
+  state: UpdateDialogProps['state'];
+  isDownloading: boolean;
+  isUpdating: boolean;
+  publishedAt?: string;
+}
+
+function UpdateDetails({ state, isDownloading, isUpdating, publishedAt }: UpdateDetailsProps) {
+  return (
+    <ScrollView
+      style={styles.scrollArea}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={styles.iconCircle} accessible accessibilityLabel="Software update">
+        <Ionicons name="cloud-download-outline" size={24} color={colors.primary} />
+      </View>
+
+      <Text accessibilityRole="header" style={styles.title}>
+        {state.releaseTitle || 'Update available'}
+      </Text>
+      <Text style={styles.description}>
+        {state.status === 'ready'
+          ? 'This compatible Spendly update is downloaded and ready to install.'
+          : 'A compatible Spendly update is available for this app.'}
+      </Text>
+
+      {state.releaseVersion || publishedAt ? (
+        <View style={styles.releaseMeta}>
+          {state.releaseVersion ? (
+            <Text style={styles.releaseMetaText}>Version {state.releaseVersion}</Text>
+          ) : null}
+          {publishedAt ? <Text style={styles.releaseMetaText}>{publishedAt}</Text> : null}
+        </View>
+      ) : null}
+
+      <View style={styles.whatsNewBox}>
+        <Text style={styles.whatsNewHeader}>
+          {state.releaseNotesAreGeneral ? 'General summary' : "What's new"}
+        </Text>
+        <View style={styles.notesList}>
+          {state.releaseNoteItems.length > 0 ? state.releaseNoteItems.map((item) => (
+            <View key={item.id} style={styles.noteRow}>
+              <Text style={styles.bullet} accessibilityElementsHidden>
+                •
+              </Text>
+              <View style={styles.noteCopy}>
+                <Text style={styles.noteTitle}>{item.title}</Text>
+                <Text style={styles.noteText}>{item.description}</Text>
+              </View>
+            </View>
+          )) : (
+            <Text style={styles.noteText}>No new release notes for this installed build.</Text>
+          )}
+        </View>
+      </View>
+
+      {state.errorMessage ? (
+        <View style={styles.errorBox} accessibilityRole="alert">
+          <Ionicons name="alert-circle-outline" size={18} color={colors.danger} />
+          <Text style={styles.errorText}>
+            Could not download the update. Check your connection and try again.
+          </Text>
+        </View>
+      ) : null}
+
+      {isDownloading && !state.errorMessage ? (
+        <View style={styles.downloadingBanner}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.downloadingBannerText}>
+            {isUpdating ? 'Downloading update...' : 'Downloading update in background...'}
+          </Text>
+        </View>
+      ) : null}
+    </ScrollView>
+  );
+}
+
+interface UpdateActionsProps {
+  hasError: boolean;
+  isUpdating: boolean;
+  onUpdateNow: () => void;
+  onLater: () => void;
+}
+
+function UpdateActions({ hasError, isUpdating, onUpdateNow, onLater }: UpdateActionsProps) {
+  return (
+    <View style={styles.buttonRow}>
+      <Button
+        title="Later"
+        variant="outline"
+        onPress={onLater}
+        disabled={isUpdating}
+        accessibilityLabel="Install update later"
+        accessibilityHint="Dismisses this update prompt for the current app session"
+        style={styles.button}
+      />
+      <Button
+        title={isUpdating ? 'Downloading...' : hasError ? 'Retry update' : 'Update now'}
+        variant="primary"
+        onPress={onUpdateNow}
+        loading={isUpdating}
+        disabled={isUpdating}
+        accessibilityLabel={hasError ? 'Retry update' : 'Update now'}
+        accessibilityHint="Downloads or installs the Spendly update"
+        style={styles.button}
+      />
+    </View>
+  );
+}
+
+const styles = createThemedStyles(() => ({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
@@ -259,7 +404,18 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 18,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  releaseMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  releaseMetaText: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
   whatsNewBox: {
     width: '100%',
@@ -284,16 +440,27 @@ const styles = StyleSheet.create({
   noteRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing.xs + 2,
+    gap: spacing.sm,
   },
-  checkIcon: {
-    marginTop: 1,
+  bullet: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    lineHeight: 18,
   },
   noteText: {
     ...typography.bodySmall,
     color: colors.textPrimary,
     flex: 1,
     lineHeight: 18,
+  },
+  noteCopy: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  noteTitle: {
+    ...typography.bodySmall,
+    color: colors.textPrimary,
+    fontWeight: '700',
   },
   errorBox: {
     width: '100%',
@@ -335,4 +502,4 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
   },
-});
+}));

@@ -1,11 +1,9 @@
+import { createThemedStyles } from '../../src/theme/themed-styles';
 import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -18,6 +16,7 @@ import { Card } from '../../src/components/Card';
 import { colors } from '../../src/theme/colors';
 import { spacing } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
+import { KeyboardAwareScrollView } from '../../src/components/KeyboardAwareScrollView';
 
 export default function JoinRoomScreen() {
   const [inviteCode, setInviteCode] = useState('');
@@ -74,11 +73,10 @@ export default function JoinRoomScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <KeyboardAwareScrollView
+      containerStyle={styles.container}
+      contentContainerStyle={styles.content}
     >
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.headerBox}>
           <View style={styles.iconCircle}>
             <Ionicons name="enter-outline" size={28} color={colors.primary} />
@@ -95,6 +93,8 @@ export default function JoinRoomScreen() {
             placeholder="e.g. SP-9X2A"
             autoCapitalize="characters"
             autoCorrect={false}
+            returnKeyType="done"
+            onSubmitEditing={handleJoin}
             value={inviteCode}
             onChangeText={handleCodeChange}
             error={error || undefined}
@@ -130,12 +130,11 @@ export default function JoinRoomScreen() {
             style={styles.submitBtn}
           />
         </Card>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -198,7 +197,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.lg,
     borderWidth: 1,
-    borderColor: '#A7F3D0',
+    borderColor: colors.successText,
   },
   previewInfo: {
     flex: 1,
@@ -216,4 +215,4 @@ const styles = StyleSheet.create({
   submitBtn: {
     marginTop: spacing.xs,
   },
-});
+}));

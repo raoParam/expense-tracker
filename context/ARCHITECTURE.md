@@ -85,6 +85,14 @@ Critical operations include:
 
 Use MongoDB transactions if deployment and configuration support them. Verify Atlas tier and transaction support before depending on them. Where transactions are unavailable, design explicit atomic document updates, unique constraints, idempotency, and recovery logic; do not pretend multi-document atomicity exists.
 
+## Update release notes
+Expo Updates `updateId` is the installed JavaScript bundle identity; app version/runtime alone is
+not sufficient because multiple OTA updates can share both. Structured release-note items are
+identified by stable IDs in update metadata. The mobile client persists delivered IDs and stages
+the target update ID before reload; IDs are delivered only when that target update is observed
+running after reload. A bundle carrying structured note metadata establishes its own explicit
+baseline. No delivery is inferred from opening or dismissing an update dialog.
+
 ## 6. Authentication (Finalized: Firebase Authentication)
 - **Identity Provider**: Firebase Authentication (Spark Free Plan).
 - **Client Flow**: The mobile app interacts directly with Firebase to register, sign in, manage sessions, and obtain short-lived Firebase ID tokens (`user.getIdToken()`).

@@ -1,3 +1,4 @@
+import { createThemedStyles } from '../theme/themed-styles';
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,7 +43,7 @@ export function EmptyState({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -74,4 +75,4 @@ const styles = StyleSheet.create({
   button: {
     marginTop: spacing.sm,
   },
-});
+}));

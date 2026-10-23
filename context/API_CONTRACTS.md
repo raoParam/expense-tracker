@@ -58,7 +58,14 @@ Authentication is handled via Firebase Authentication:
 ## 8. Notifications
 - `GET /notifications` — in-app notification list
 - `POST /notifications/:notificationId/read` — mark read
-Push delivery can be added after core flows are stable.
+- Shared-expense acknowledgement pushes use Expo category `expense_acknowledgement` and carry only:
+  `type: EXPENSE_NEEDS_ACKNOWLEDGEMENT`, `roomId`, `expenseId`, and the server `revision`.
+  The Android client may submit the existing acknowledge/reject endpoints directly from those actions;
+  the payload is untrusted and never authorizes the mutation.
+- Rejection actions provide a mandatory trimmed reason, 3–300 characters. The server revalidates the
+  authenticated user, room membership, participant status, expense status, and expected revision.
+- Duplicate acknowledgement actions are idempotent. A participant cannot transition twice in one
+  revision; resubmission creates the next revision and resets eligible participants to pending.
 
 ## 9. API invariants
 - Every route authenticates the caller where required via `Authorization: Bearer <token>`.

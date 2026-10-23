@@ -1,13 +1,12 @@
+import { createThemedStyles } from '../../src/theme/themed-styles';
 import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
   TouchableOpacity,
+  TextInput,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +17,7 @@ import { Card } from '../../src/components/Card';
 import { colors } from '../../src/theme/colors';
 import { spacing, radii } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
+import { KeyboardAwareScrollView } from '../../src/components/KeyboardAwareScrollView';
 
 export default function RegisterScreen() {
   const { register } = useAuth();
@@ -27,6 +27,9 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const emailRef = React.useRef<TextInput>(null);
+  const passwordRef = React.useRef<TextInput>(null);
+  const confirmPasswordRef = React.useRef<TextInput>(null);
 
   const handleRegister = async () => {
     const newErrors: Record<string, string> = {};
@@ -59,11 +62,10 @@ export default function RegisterScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <KeyboardAwareScrollView
+      containerStyle={styles.container}
+      contentContainerStyle={styles.content}
     >
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.headerBox}>
           <View style={styles.iconCircle}>
             <Ionicons name="person-add" size={28} color={colors.primary} />
@@ -78,6 +80,9 @@ export default function RegisterScreen() {
           <FormField
             label="Your Name (Optional, max 32 chars)"
             placeholder="e.g. Rohan Sharma"
+            returnKeyType="next"
+            onSubmitEditing={() => emailRef.current?.focus()}
+            blurOnSubmit={false}
             value={displayName}
             onChangeText={(text) => {
               setDisplayName(text);
@@ -89,10 +94,14 @@ export default function RegisterScreen() {
           />
 
           <FormField
+            ref={emailRef}
             label="Email Address"
             placeholder="student@hostel.edu"
             keyboardType="email-address"
             autoCapitalize="none"
+            returnKeyType="next"
+            onSubmitEditing={() => passwordRef.current?.focus()}
+            blurOnSubmit={false}
             value={email}
             onChangeText={(text) => {
               setEmail(text);
@@ -103,9 +112,13 @@ export default function RegisterScreen() {
           />
 
           <FormField
+            ref={passwordRef}
             label="Password (min 6 characters)"
             placeholder="••••••••"
             secureTextEntry
+            returnKeyType="next"
+            onSubmitEditing={() => confirmPasswordRef.current?.focus()}
+            blurOnSubmit={false}
             value={password}
             onChangeText={(text) => {
               setPassword(text);
@@ -116,9 +129,12 @@ export default function RegisterScreen() {
           />
 
           <FormField
+            ref={confirmPasswordRef}
             label="Confirm Password"
             placeholder="••••••••"
             secureTextEntry
+            returnKeyType="done"
+            onSubmitEditing={handleRegister}
             value={confirmPassword}
             onChangeText={(text) => {
               setConfirmPassword(text);
@@ -143,12 +159,11 @@ export default function RegisterScreen() {
             <Text style={styles.switchLink}>Sign In</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -206,4 +221,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary,
   },
-});
+}));

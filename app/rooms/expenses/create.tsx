@@ -1,15 +1,13 @@
+import { createThemedStyles } from '../../../src/theme/themed-styles';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +23,7 @@ import { typography } from '../../../src/theme/typography';
 import { SplitType, SplitParticipantInput, calculateClientShares } from '../../../src/domain/split';
 import { validateRupeeInput, rupeesToPaise, paiseToRupees } from '../../../src/domain/money';
 import { LIMITS } from '../../../src/constants/limits';
+import { KeyboardAwareScrollView } from '../../../src/components/KeyboardAwareScrollView';
 
 export default function CreateSharedExpenseScreen() {
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
@@ -203,11 +202,11 @@ export default function CreateSharedExpenseScreen() {
   const selectedCount = participants.filter((p) => p.selected !== false).length;
 
   return (
-    <KeyboardAvoidingView
-      style={styles.keyboardView}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <KeyboardAwareScrollView
+      containerStyle={styles.keyboardView}
+      style={styles.container}
+      contentContainerStyle={styles.content}
     >
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         {errorMessage ? (
           <View style={styles.errorBanner}>
             <Ionicons name="alert-circle" size={20} color={colors.danger} />
@@ -320,6 +319,7 @@ export default function CreateSharedExpenseScreen() {
                     <TextInput
                       style={styles.splitTextInput}
                       placeholder="0.00"
+                      placeholderTextColor={colors.textMuted}
                       keyboardType="decimal-pad"
                       value={p.amountRupees}
                       onChangeText={(val) => updateParticipantField(p.userId, 'amountRupees', val)}
@@ -333,6 +333,7 @@ export default function CreateSharedExpenseScreen() {
                     <TextInput
                       style={styles.splitTextInput}
                       placeholder="0.00"
+                      placeholderTextColor={colors.textMuted}
                       keyboardType="decimal-pad"
                       value={p.percentage}
                       onChangeText={(val) => updateParticipantField(p.userId, 'percentage', val)}
@@ -347,6 +348,7 @@ export default function CreateSharedExpenseScreen() {
                       <TextInput
                         style={styles.splitTextInput}
                         placeholder="1"
+                        placeholderTextColor={colors.textMuted}
                         keyboardType="number-pad"
                         value={p.quantity}
                         onChangeText={(val) => updateParticipantField(p.userId, 'quantity', val)}
@@ -357,6 +359,7 @@ export default function CreateSharedExpenseScreen() {
                       <TextInput
                         style={styles.splitTextInput}
                         placeholder="0.00"
+                        placeholderTextColor={colors.textMuted}
                         keyboardType="decimal-pad"
                         value={p.unitPriceRupees}
                         onChangeText={(val) => updateParticipantField(p.userId, 'unitPriceRupees', val)}
@@ -403,12 +406,11 @@ export default function CreateSharedExpenseScreen() {
           loading={submitting}
           style={styles.submitBtn}
         />
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   keyboardView: {
     flex: 1,
     backgroundColor: colors.background,
@@ -588,4 +590,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     marginBottom: spacing.xl,
   },
-});
+}));

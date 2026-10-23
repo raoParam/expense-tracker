@@ -164,8 +164,16 @@ describe('Push Notifications Backend Tests', () => {
       expect(callArgs.recipientIds).toEqual(['user_2', 'user_3']);
       expect(callArgs.recipientIds).not.toContain('user_1');
       expect(callArgs.title).toBe('Room Alpha');
-      expect(callArgs.body).toContain('Dinner Party');
-      expect(callArgs.body).toContain('1500.00');
+      expect(callArgs.body).toContain('shared expense');
+      expect(callArgs.body).not.toContain('1500.00');
+      expect(callArgs.categoryId).toBe('expense_acknowledgement');
+      expect(callArgs.data).toEqual(
+        expect.objectContaining({
+          type: 'EXPENSE_NEEDS_ACKNOWLEDGEMENT',
+          expenseId: 'exp_001',
+          revision: 1,
+        })
+      );
     });
 
     it('should notify participants again on expense resubmission with updated revision', async () => {
@@ -191,6 +199,7 @@ describe('Push Notifications Backend Tests', () => {
       expect(callArgs.recipientIds).toEqual(['user_2']);
       expect(callArgs.data.revision).toBe(2);
       expect(callArgs.dedupKeyPrefix).toContain(':2');
+      expect(callArgs.categoryId).toBe('expense_acknowledgement');
     });
 
     it('should notify the payer when an expense is rejected by a participant', async () => {

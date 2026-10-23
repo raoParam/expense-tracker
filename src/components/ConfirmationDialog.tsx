@@ -1,3 +1,4 @@
+import { createThemedStyles } from '../theme/themed-styles';
 import React from 'react';
 import {
   Modal,
@@ -72,7 +73,7 @@ export function ConfirmationDialog({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
@@ -112,4 +113,4 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
   },
-});
+}));

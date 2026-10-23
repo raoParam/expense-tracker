@@ -1,13 +1,11 @@
+import { createThemedStyles } from '../../src/theme/themed-styles';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
   Alert,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -31,6 +29,7 @@ import { EmptyState } from '../../src/components/EmptyState';
 import { colors } from '../../src/theme/colors';
 import { spacing, radii } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
+import { KeyboardAwareScrollView } from '../../src/components/KeyboardAwareScrollView';
 
 export default function ExpenseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -159,11 +158,10 @@ export default function ExpenseDetailScreen() {
     : null;
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <KeyboardAwareScrollView
+      containerStyle={styles.container}
+      contentContainerStyle={styles.content}
     >
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {isEditing ? (
           /* Edit Mode Form */
           <View>
@@ -341,8 +339,6 @@ export default function ExpenseDetailScreen() {
             </View>
           </View>
         )}
-      </ScrollView>
-
       {/* Confirmation Modal for Deletion */}
       <ConfirmationDialog
         visible={showDeleteModal}
@@ -355,11 +351,11 @@ export default function ExpenseDetailScreen() {
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteModal(false)}
       />
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -494,4 +490,4 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginTop: spacing.lg,
   },
-});
+}));

@@ -1,3 +1,4 @@
+import { createThemedStyles } from '../theme/themed-styles';
 import React from 'react';
 import {
   TouchableOpacity,
@@ -76,7 +77,7 @@ export function ExpenseRow({ expense, onPress, style }: ExpenseRowProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -138,4 +139,4 @@ const styles = StyleSheet.create({
   chevron: {
     marginLeft: 4,
   },
-});
+}));

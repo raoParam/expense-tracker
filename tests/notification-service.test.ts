@@ -12,12 +12,14 @@ import { Linking, Platform } from 'react-native';
 jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(),
   setNotificationChannelAsync: jest.fn(),
+  setNotificationCategoryAsync: jest.fn(),
   getPermissionsAsync: jest.fn(),
   requestPermissionsAsync: jest.fn(),
   getExpoPushTokenAsync: jest.fn(),
   addNotificationResponseReceivedListener: jest.fn(),
   getLastNotificationResponseAsync: jest.fn(),
   addPushTokenListener: jest.fn(),
+  scheduleNotificationAsync: jest.fn(),
   AndroidImportance: {
     MAX: 7,
     HIGH: 6,
@@ -266,6 +268,21 @@ describe('Mobile NotificationService Tests', () => {
   });
 
   describe('Notification Tap Routing', () => {
+    it('registers acknowledgement and mandatory-reason rejection actions', async () => {
+      await NotificationService.configureExpenseActions();
+      expect(Notifications.setNotificationCategoryAsync).toHaveBeenCalledWith(
+        'expense_acknowledgement',
+        expect.arrayContaining([
+          expect.objectContaining({ identifier: 'expense_acknowledge', buttonTitle: 'Acknowledge' }),
+          expect.objectContaining({
+            identifier: 'expense_reject',
+            buttonTitle: 'Reject',
+            textInput: expect.objectContaining({ submitButtonTitle: 'Reject' }),
+          }),
+        ])
+      );
+    });
+
     it('should route to expense detail screen when expenseId is present in payload', () => {
       const target = NotificationService.resolveNavigationTarget({
         type: 'EXPENSE_NEEDS_ACKNOWLEDGEMENT',
@@ -290,9 +307,85 @@ describe('Mobile NotificationService Tests', () => {
       });
     });
 
+    it('should route to room settlements tab when settlementId and roomId are present', () => {
+      const target = NotificationService.resolveNavigationTarget({
+        type: 'SETTLEMENT_REQUESTED',
+        roomId: 'room_xyz_789',
+        settlementId: 'settle_456',
+      });
+
+      expect(target).toEqual({
+        route: '/rooms/room_xyz_789',
+        params: { tab: 'settlements', settlementId: 'settle_456' },
+      });
+    });
+
+    it('should route to home with showUpdate param when type is APP_UPDATE', () => {
+      const target = NotificationService.resolveNavigationTarget({
+        type: 'APP_UPDATE',
+        updateId: 'update_ota_99',
+      });
+
+      expect(target).toEqual({
+        route: '/(tabs)',
+        params: { showUpdate: 'true' },
+      });
+    });
+
     it('should return null when notification data is empty or invalid', () => {
       expect(NotificationService.resolveNavigationTarget(null)).toBeNull();
       expect(NotificationService.resolveNavigationTarget({})).toBeNull();
+    });
+  });
+
+  describe('Update Notification Delivery & Deduplication', () => {
+    it('schedules notification for a new update with missing notes', async () => {
+      const scheduled = await NotificationService.notifyUpdateAvailable('update_ota_1', [
+        'Receipt verification push alerts',
+        'Dark mode contrast fixes',
+      ]);
+
+      expect(scheduled).toBe(true);
+      expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.objectContaining({
+            title: 'New Update Available',
+            body: 'Receipt verification push alerts • Dark mode contrast fixes',
+            data: { type: 'APP_UPDATE', updateId: 'update_ota_1' },
+          }),
+        })
+      );
+      expect(
+        await AsyncStorage.getItem(NOTIFICATION_STORAGE_KEYS.LAST_NOTIFIED_UPDATE_ID)
+      ).toBe('update_ota_1');
+    });
+
+    it('deduplicates and skips notifying repeatedly for the same updateId', async () => {
+      await AsyncStorage.setItem(
+        NOTIFICATION_STORAGE_KEYS.LAST_NOTIFIED_UPDATE_ID,
+        'update_ota_1'
+      );
+      (Notifications.scheduleNotificationAsync as jest.Mock).mockClear();
+
+      const scheduled = await NotificationService.notifyUpdateAvailable('update_ota_1', [
+        'Some notes',
+      ]);
+
+      expect(scheduled).toBe(false);
+      expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+    });
+
+    it('falls back to default summary when notes are empty', async () => {
+      const scheduled = await NotificationService.notifyUpdateAvailable('update_ota_2', []);
+
+      expect(scheduled).toBe(true);
+      expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.objectContaining({
+            body: 'Bug fixes and performance improvements.',
+          }),
+        })
+      );
     });
   });
 

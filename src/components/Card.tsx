@@ -1,3 +1,4 @@
+import { createThemedStyles } from '../theme/themed-styles';
 import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
 import { colors } from '../theme/colors';
@@ -24,7 +25,7 @@ export function Card({ children, style, variant = 'default' }: CardProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   base: {
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
@@ -50,4 +51,4 @@ const styles = StyleSheet.create({
     elevation: 0,
     shadowOpacity: 0,
   },
-});
+}));

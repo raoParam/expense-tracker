@@ -1,13 +1,12 @@
+import { createThemedStyles } from '../../src/theme/themed-styles';
 import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
   TouchableOpacity,
+  TextInput,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +17,7 @@ import { Card } from '../../src/components/Card';
 import { colors } from '../../src/theme/colors';
 import { spacing, radii } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
+import { KeyboardAwareScrollView } from '../../src/components/KeyboardAwareScrollView';
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -25,6 +25,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const passwordInputRef = React.useRef<TextInput>(null);
 
   const handleLogin = async () => {
     const newErrors: Record<string, string> = {};
@@ -50,11 +51,10 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <KeyboardAwareScrollView
+      containerStyle={styles.container}
+      contentContainerStyle={styles.content}
     >
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.headerBox}>
           <View style={styles.iconCircle}>
             <Ionicons name="lock-closed" size={28} color={colors.primary} />
@@ -71,6 +71,9 @@ export default function LoginScreen() {
             placeholder="student@hostel.edu"
             keyboardType="email-address"
             autoCapitalize="none"
+            returnKeyType="next"
+            onSubmitEditing={() => passwordInputRef.current?.focus()}
+            blurOnSubmit={false}
             value={email}
             onChangeText={(text) => {
               setEmail(text);
@@ -81,9 +84,12 @@ export default function LoginScreen() {
           />
 
           <FormField
+            ref={passwordInputRef}
             label="Password"
             placeholder="••••••••"
             secureTextEntry
+            returnKeyType="done"
+            onSubmitEditing={handleLogin}
             value={password}
             onChangeText={(text) => {
               setPassword(text);
@@ -108,12 +114,11 @@ export default function LoginScreen() {
             <Text style={styles.switchLink}>Create Account</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -171,4 +176,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.primary,
   },
-});
+}));
