@@ -7,14 +7,12 @@ import {
   TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
   ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from './Button';
+import { useKeyboardOverlap } from './keyboard-policy';
 import { colors } from '../theme/colors';
 import { spacing, radii } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -70,6 +68,7 @@ export function KeyboardComposerModal({
   containerStyle,
 }: KeyboardComposerModalProps) {
   const insets = useSafeAreaInsets();
+  const { ref, overlap, onLayout } = useKeyboardOverlap();
   const isSubmittingRef = useRef(false);
 
   const handleSubmit = useCallback(() => {
@@ -95,19 +94,16 @@ export function KeyboardComposerModal({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <View style={styles.backdrop}>
+      <View ref={ref} onLayout={onLayout} style={[styles.backdrop, { paddingBottom: overlap }]}>
         <TouchableWithoutFeedback onPress={onClose}>
           <View style={styles.dismissArea} />
         </TouchableWithoutFeedback>
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardContainer}
-        >
+        <View style={styles.keyboardContainer}>
           <View
             style={[
               styles.composerCard,
-              { paddingBottom: Math.max(insets.bottom, spacing.md) },
+              { paddingBottom: overlap ? spacing.md : Math.max(insets.bottom, spacing.md) },
               containerStyle,
             ]}
           >
@@ -143,6 +139,7 @@ export function KeyboardComposerModal({
                 numberOfLines={numberOfLines}
                 maxLength={maxLength}
                 autoFocus={autoFocus}
+                disableFullscreenUI
                 autoCapitalize={autoCapitalize}
                 autoCorrect={autoCorrect}
                 textAlignVertical="top"
@@ -174,7 +171,7 @@ export function KeyboardComposerModal({
               />
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </View>
     </Modal>
   );

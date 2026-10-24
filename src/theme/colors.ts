@@ -40,6 +40,7 @@ const lightColors = {
   infoText: '#1E40AF',
 
   // Summary card tokens
+  summaryBackground: '#4338CA',
   summaryText: '#FFFFFF',
   summaryMuted: '#C7D2FE',
   summaryBorder: 'rgba(255, 255, 255, 0.15)',
@@ -82,6 +83,7 @@ const darkColors: Colors = {
   info: '#A8A8A8',
   infoLight: '#1C1C1E',
   infoText: '#A8A8A8',
+  summaryBackground: '#1C1C1E',
   summaryText: '#FAFAFA',
   summaryMuted: '#A8A8A8',
   summaryBorder: '#262626',

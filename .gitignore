@@ -43,3 +43,9 @@ chatgpt/
 .vscode/
 coverage/
 
+repomix-output.xml
+
+# Patches
+Patch/
+Patch/patch-01-darkmode-keyboard.patch
+*.patch

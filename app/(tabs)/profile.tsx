@@ -11,8 +11,6 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -21,6 +19,7 @@ import { useTheme } from '../../src/context/ThemeContext';
 import { ThemeMode } from '../../src/services/preferences-service';
 import { NotificationService } from '../../src/services/notification-service';
 import { Button } from '../../src/components/Button';
+import { useKeyboardOverlap } from '../../src/components/keyboard-policy';
 import { Card } from '../../src/components/Card';
 import { ConfirmationDialog } from '../../src/components/ConfirmationDialog';
 import { colors } from '../../src/theme/colors';
@@ -37,6 +36,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout, updateDisplayName } = useAuth();
   const { mode, setMode } = useTheme();
+  const keyboard = useKeyboardOverlap();
   const [notificationsEnabled, setNotificationsEnabled] = React.useState<boolean | null>(null);
   const [editVisible, setEditVisible] = React.useState(false);
   const [displayName, setDisplayName] = React.useState('');
@@ -256,33 +256,29 @@ export default function ProfileScreen() {
         onRequestClose={() => setEditVisible(false)}
       >
         <TouchableWithoutFeedback onPress={() => setEditVisible(false)}>
-          <View style={styles.modalOverlay}>
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              style={styles.modalKeyboard}
-            >
-              <TouchableWithoutFeedback>
-                <View style={styles.modalCard}>
-                  <Text style={styles.modalTitle}>Edit Profile</Text>
-                  <Text style={styles.modalDescription}>This name is synchronized with your Spendly account and shared-room membership.</Text>
-                  <TextInput
-                    value={displayName}
-                    onChangeText={setDisplayName}
-                    placeholder="Display name"
-                    placeholderTextColor={colors.textMuted}
-                    style={styles.input}
-                    maxLength={32}
-                    autoFocus
-                    returnKeyType="done"
-                    onSubmitEditing={saveProfile}
-                  />
-                  <View style={styles.modalActions}>
-                    <Button title="Cancel" variant="outline" onPress={() => setEditVisible(false)} style={styles.modalButton} disabled={savingProfile} />
-                    <Button title="Save" onPress={saveProfile} style={styles.modalButton} loading={savingProfile} />
-                  </View>
+          <View ref={keyboard.ref} onLayout={keyboard.onLayout} style={[styles.modalOverlay, { paddingBottom: spacing.lg + keyboard.overlap }]}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>Edit Profile</Text>
+                <Text style={styles.modalDescription}>This name is synchronized with your Spendly account and shared-room membership.</Text>
+                <TextInput
+                  value={displayName}
+                  onChangeText={setDisplayName}
+                  placeholder="Display name"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.input}
+                  maxLength={32}
+                  autoFocus
+                  disableFullscreenUI
+                  returnKeyType="done"
+                  onSubmitEditing={saveProfile}
+                />
+                <View style={styles.modalActions}>
+                  <Button title="Cancel" variant="outline" onPress={() => setEditVisible(false)} style={styles.modalButton} disabled={savingProfile} />
+                  <Button title="Save" onPress={saveProfile} style={styles.modalButton} loading={savingProfile} />
                 </View>
-              </TouchableWithoutFeedback>
-            </KeyboardAvoidingView>
+              </View>
+            </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
       </Modal>
@@ -335,8 +331,6 @@ const styles = createThemedStyles(() => ({
   rowCopy: { flex: 1 },
   footer: { ...typography.caption, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xxl },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
-  modalKeyboard: { flex: 1, width: '100%' },
-  modalScroll: { flexGrow: 1, justifyContent: 'center' },
   modalCard: { width: '100%', maxWidth: 420, backgroundColor: colors.surface, borderRadius: radii.xl, padding: spacing.xl, borderWidth: 1, borderColor: colors.border, elevation: 5 },
   modalTitle: { ...typography.h3, color: colors.textPrimary, marginBottom: spacing.xs },
   modalDescription: { ...typography.bodySmall, color: colors.textSecondary, lineHeight: 19, marginBottom: spacing.lg },

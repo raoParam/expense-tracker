@@ -56,6 +56,7 @@ export const FormField = React.forwardRef<TextInput, FormFieldProps>(function Fo
           ref={ref}
           style={[styles.input, inputStyle]}
           placeholderTextColor={colors.textMuted}
+          disableFullscreenUI
           onFocus={(event) => {
             setIsFocused(true);
             onFocus?.(event);

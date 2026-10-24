@@ -1,12 +1,11 @@
-import React, { useCallback, useRef } from 'react';
+import React from 'react';
 import {
   KeyboardAvoidingView,
-  findNodeHandle,
-  InteractionManager,
   Platform,
   ScrollView,
   ScrollViewProps,
   StyleProp,
+  View,
   ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +13,7 @@ import { createThemedStyles } from '../theme/themed-styles';
 import {
   getKeyboardAvoidingBehavior,
   getKeyboardAwareScrollDefaults,
+  useKeyboardOverlap,
 } from './keyboard-policy';
 
 export interface KeyboardAwareScrollViewProps extends ScrollViewProps {
@@ -22,9 +22,11 @@ export interface KeyboardAwareScrollViewProps extends ScrollViewProps {
 }
 
 /**
- * The one keyboard policy used by every Spendly form and input modal.
- * Android's resize mode supplies the viewport change; adding a second height
- * adjustment on top of it is what caused the old layout jumps and blank space.
+ * The one keyboard policy used by every Spendly form. iOS uses
+ * KeyboardAvoidingView padding. On Android the viewport is shortened by the
+ * keyboard overlap actually measured, so it is correct whether or not the OS
+ * resized the window, and the native ScrollView then scrolls the focused input
+ * into view.
  */
 export function KeyboardAwareScrollView({
   children,
@@ -33,58 +35,33 @@ export function KeyboardAwareScrollView({
   keyboardShouldPersistTaps,
   keyboardDismissMode,
   automaticallyAdjustKeyboardInsets,
-  scrollsChildToFocus = true,
-  onFocus,
   ...scrollViewProps
 }: KeyboardAwareScrollViewProps) {
-  const scrollViewRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
-  const keyboardDefaults = getKeyboardAwareScrollDefaults(Platform.OS as 'ios' | 'android' | 'web');
-
-  const handleFocus = useCallback<NonNullable<ScrollViewProps['onFocus']>>(
-    (event) => {
-      onFocus?.(event);
-
-      // RN exposes this responder method specifically for use from a parent
-      // view's TextInput onFocus callback. It works for FormField and raw
-      // TextInput controls without requiring a separate keyboard library.
-      const target = findNodeHandle(event.nativeEvent.target);
-      if (target == null) return;
-
-      InteractionManager.runAfterInteractions(() => {
-        requestAnimationFrame(() => {
-          scrollViewRef.current?.scrollResponderScrollNativeHandleToKeyboard(
-            target,
-            0,
-            true
-          );
-        });
-      });
-    },
-    [onFocus]
-  );
+  const defaults = getKeyboardAwareScrollDefaults(Platform.OS as 'ios' | 'android' | 'web');
+  const { ref, overlap, onLayout } = useKeyboardOverlap();
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, containerStyle]}
+      style={styles.container}
       behavior={getKeyboardAvoidingBehavior(Platform.OS as 'ios' | 'android' | 'web')}
     >
-      <ScrollView
-        ref={scrollViewRef}
-        {...scrollViewProps}
-        contentContainerStyle={[
-          { paddingBottom: Math.max(insets.bottom, 16) },
-          contentContainerStyle,
-        ]}
-        keyboardShouldPersistTaps={keyboardShouldPersistTaps ?? keyboardDefaults.keyboardShouldPersistTaps}
-        keyboardDismissMode={keyboardDismissMode ?? keyboardDefaults.keyboardDismissMode}
-        automaticallyAdjustKeyboardInsets={automaticallyAdjustKeyboardInsets ?? keyboardDefaults.automaticallyAdjustKeyboardInsets}
-        scrollsChildToFocus={scrollsChildToFocus}
-        nestedScrollEnabled={false}
-        {...({ onFocusCapture: handleFocus } as unknown as ScrollViewProps)}
+      <View
+        ref={ref}
+        onLayout={onLayout}
+        style={[styles.container, containerStyle, { paddingBottom: overlap }]}
       >
-        {children}
-      </ScrollView>
+        <ScrollView
+          {...scrollViewProps}
+          contentContainerStyle={[{ paddingBottom: Math.max(insets.bottom, 16) }, contentContainerStyle]}
+          keyboardShouldPersistTaps={keyboardShouldPersistTaps ?? defaults.keyboardShouldPersistTaps}
+          keyboardDismissMode={keyboardDismissMode ?? defaults.keyboardDismissMode}
+          automaticallyAdjustKeyboardInsets={automaticallyAdjustKeyboardInsets ?? defaults.automaticallyAdjustKeyboardInsets}
+          nestedScrollEnabled={defaults.nestedScrollEnabled}
+        >
+          {children}
+        </ScrollView>
+      </View>
     </KeyboardAvoidingView>
   );
 }

@@ -1,6 +1,6 @@
 import { createThemedStyles } from '../theme/themed-styles';
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text } from 'react-native';
 import { AmountText } from './AmountText';
 import { colors } from '../theme/colors';
 import { useTheme } from '../context/ThemeContext';
@@ -51,11 +51,11 @@ export function SummaryCard({
 
 const styles = createThemedStyles(() => ({
   container: {
-    backgroundColor: colors.primaryDark,
+    backgroundColor: colors.summaryBackground,
     borderRadius: radii.xl,
     padding: spacing.xl,
     marginBottom: spacing.lg,
-    shadowColor: colors.primaryDark,
+    shadowColor: colors.summaryBackground,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
