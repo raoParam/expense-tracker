@@ -1,13 +1,6 @@
 import { createThemedStyles } from '../theme/themed-styles';
 import React from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-} from 'react-native';
+import { Modal, View, Text, TouchableWithoutFeedback } from 'react-native';
 import { Button } from './Button';
 import { colors } from '../theme/colors';
 import { spacing, radii } from '../theme/spacing';
@@ -16,7 +9,11 @@ import { typography } from '../theme/typography';
 export interface ConfirmationDialogProps {
   visible: boolean;
   title: string;
-  message: string;
+  message?: string;
+  /** Optional icon shown above the title; switches the dialog to a centered layout. */
+  icon?: React.ReactNode;
+  /** Extra content between the message and the buttons. */
+  children?: React.ReactNode;
   confirmText?: string;
   cancelText?: string;
   isDestructive?: boolean;
@@ -29,6 +26,8 @@ export function ConfirmationDialog({
   visible,
   title,
   message,
+  icon,
+  children,
   confirmText = 'Confirm',
   cancelText = 'Cancel',
   isDestructive = false,
@@ -36,27 +35,28 @@ export function ConfirmationDialog({
   onCancel,
   loading = false,
 }: ConfirmationDialogProps) {
+  const centered = Boolean(icon);
+  // Backdrop taps and the Android back button must not cancel a request in flight.
+  const dismiss = () => {
+    if (!loading) onCancel();
+  };
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onCancel}
-    >
-      <TouchableWithoutFeedback onPress={onCancel}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={dismiss}>
+      <TouchableWithoutFeedback onPress={dismiss}>
         <View style={styles.overlay}>
           <TouchableWithoutFeedback>
-            <View style={styles.dialog}>
-              <Text style={styles.title}>{title}</Text>
-              <Text style={styles.message}>{message}</Text>
+            <View style={[styles.dialog, centered && styles.centered]}>
+              {icon}
+              <Text style={[styles.title, centered && styles.centeredText]}>{title}</Text>
+              {message ? (
+                <Text style={[styles.message, centered && styles.centeredText, children ? styles.messageTight : null]}>
+                  {message}
+                </Text>
+              ) : null}
+              {children}
               <View style={styles.buttonRow}>
-                <Button
-                  title={cancelText}
-                  onPress={onCancel}
-                  variant="outline"
-                  style={styles.button}
-                  disabled={loading}
-                />
+                <Button title={cancelText} onPress={onCancel} variant="outline" style={styles.button} disabled={loading} />
                 <Button
                   title={confirmText}
                   onPress={onConfirm}
@@ -95,6 +95,12 @@ const styles = createThemedStyles(() => ({
     shadowOpacity: 0.15,
     shadowRadius: 8,
   },
+  centered: {
+    alignItems: 'center',
+  },
+  centeredText: {
+    textAlign: 'center',
+  },
   title: {
     ...typography.h3,
     color: colors.textPrimary,
@@ -106,9 +112,13 @@ const styles = createThemedStyles(() => ({
     lineHeight: 20,
     marginBottom: spacing.xl,
   },
+  messageTight: {
+    marginBottom: spacing.md,
+  },
   buttonRow: {
     flexDirection: 'row',
     gap: spacing.md,
+    width: '100%',
   },
   button: {
     flex: 1,

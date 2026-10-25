@@ -73,7 +73,7 @@ Rules:
 - Only the named receiver can verify or reject the repayment request.
 - Only verified settlements change balances.
 - Rejected settlements leave the debt unchanged and record the rejection reason.
-- The authenticated debtor must be the transfer sender, the receiver must be an active room member, and the amount must match the current net-balance transfer when created and verified.
+- The authenticated debtor must be the transfer sender, the receiver must be an active room member, and the amount must match what the debtor currently owes that receiver (pair debt) when created and verified.
 - Use idempotency keys and concurrency controls so repeated requests or concurrent verification cannot settle twice.
 - Preserve full settlement history for auditing.
 
@@ -97,9 +97,9 @@ Where:
 ### Key Invariants
 1. **Conservation of Money**: The sum of all member balances in any room must strictly equal zero:
    $$\sum_{u \in \text{Room}} \text{balance}[u] = 0$$
-2. **Canonical Transfers**: The directed transfer projection is generated dynamically in memory from these net balances. It is used for suggestions and settlement authorization; it is never persisted as a source-of-truth debt record.
+2. **Canonical Transfers**: Suggested transfers are per-pair debts (what one member owes one other member, netted across both directions), generated dynamically in memory from confirmed expenses and verified settlements. A settlement only changes its own pair, so other members' suggestions never shift. It is used for suggestions and settlement authorization; it is never persisted as a source-of-truth debt record.
 3. **Historical Settlements**: Existing verified settlement records are interpreted as actual debtor-to-receiver payments under this formula. The system does not infer or rewrite their original expense pairing.
-4. **Transfer Conservation**: Suggested transfers must conserve money and completely settle all net balances.
+4. **Transfer Conservation**: Paying every suggested transfer brings every net balance to zero.
 
 ## 9. Offline and local data
 - Personal expenses are local-only in V1, stored on the device using SQLite.

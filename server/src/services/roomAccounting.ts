@@ -1,10 +1,13 @@
 /**
  * Canonical shared-room accounting.
  *
- * The ledger is intentionally net-balance based. Confirmed expenses and
- * verified settlements are the only inputs. A settlement is an actual payment
- * and changes the debtor's and recipient's net balances; it is never treated
- * as a bilateral expense edge.
+ * Confirmed expenses and verified settlements are the only inputs. Two views
+ * are derived from them:
+ *  - net balances (what each member is owed or owes the room), which always sum
+ *    to zero, and
+ *  - per-pair debts (what one member owes one other member), which are what
+ *    Settle Up suggests. A settlement only reduces the debt between its own two
+ *    members, so settling one pair never changes anyone else's transfers.
  */
 
 export interface AccountingParticipant {
@@ -39,8 +42,16 @@ export interface AccountingBalance {
   totalSharePaise: number;
 }
 
+/** What `fromUserId` currently owes `toUserId`, after netting both directions. */
+export interface AccountingDebt {
+  fromUserId: string;
+  toUserId: string;
+  amountPaise: number;
+}
+
 export interface AccountingResult {
   balances: AccountingBalance[];
+  debts: AccountingDebt[];
 }
 
 export interface SuggestedTransfer {
@@ -75,6 +86,9 @@ export function calculateRoomAccounting(
   const memberMap = new Map<string, AccountingMember>();
   const paidMap = new Map<string, number>();
   const shareMap = new Map<string, number>();
+  // owed[debtor][creditor]: what the debtor owes the creditor before netting the opposite direction.
+  const owedMap = new Map<string, number>();
+  const pairKey = (debtorId: string, creditorId: string) => `${debtorId}\u0000${creditorId}`;
 
   const ensureMember = (member: AccountingMember): void => {
     if (!memberMap.has(member.userId)) {
@@ -93,6 +107,9 @@ export function calculateRoomAccounting(
     for (const participant of expense.participants) {
       ensureMember({ userId: participant.userId });
       addToMap(shareMap, participant.userId, participant.sharePaise);
+      if (participant.userId !== expense.payerId) {
+        addToMap(owedMap, pairKey(participant.userId, expense.payerId), participant.sharePaise);
+      }
     }
   }
 
@@ -104,6 +121,7 @@ export function calculateRoomAccounting(
     // receiver's credit. This is the only settlement effect on balances.
     addToMap(paidMap, settlement.debtorId, settlement.amountPaise);
     addToMap(shareMap, settlement.receiverId, settlement.amountPaise);
+    addToMap(owedMap, pairKey(settlement.debtorId, settlement.receiverId), -settlement.amountPaise);
   }
 
   const balances = Array.from(memberMap.values()).map((member) => {
@@ -117,61 +135,42 @@ export function calculateRoomAccounting(
     };
   });
 
-  return { balances };
+  const debts: AccountingDebt[] = [];
+  for (const [key, owedPaise] of owedMap) {
+    const [fromUserId, toUserId] = key.split('\u0000');
+    const mirrorKey = pairKey(toUserId, fromUserId);
+    const netPaise = owedPaise - (owedMap.get(mirrorKey) || 0);
+    if (netPaise > 0) debts.push({ fromUserId, toUserId, amountPaise: netPaise });
+    // An overpaid pair with no opposite entry (legacy data) flips direction.
+    else if (netPaise < 0 && !owedMap.has(mirrorKey)) {
+      debts.push({ fromUserId: toUserId, toUserId: fromUserId, amountPaise: -netPaise });
+    }
+  }
+  debts.sort(
+    (a, b) =>
+      b.amountPaise - a.amountPaise ||
+      a.fromUserId.localeCompare(b.fromUserId) ||
+      a.toUserId.localeCompare(b.toUserId)
+  );
+
+  return { balances, debts };
 }
 
 /**
- * Create informational/actionable transfers from the canonical net balances.
- * This greedy matching is deterministic and is the only transfer projection
- * used by both the UI and settlement authorization.
+ * Suggested transfers are the outstanding per-pair debts. They are the only
+ * transfer projection used by both the UI and settlement authorization, and a
+ * pair's transfer changes only when that pair's own expenses or settlements do.
  */
 export function calculateSuggestedTransfers(accounting: AccountingResult): SuggestedTransfer[] {
-  const creditors = accounting.balances
-    .filter((balance) => balance.netBalancePaise > 0)
-    .map((balance) => ({
-      userId: balance.userId,
-      displayName: balance.displayName,
-      amountPaise: balance.netBalancePaise,
-    }))
-    .sort((a, b) => b.amountPaise - a.amountPaise || a.userId.localeCompare(b.userId));
-
-  const debtors = accounting.balances
-    .filter((balance) => balance.netBalancePaise < 0)
-    .map((balance) => ({
-      userId: balance.userId,
-      displayName: balance.displayName,
-      amountPaise: -balance.netBalancePaise,
-    }))
-    .sort((a, b) => b.amountPaise - a.amountPaise || a.userId.localeCompare(b.userId));
-
-  const suggestedTransfers: SuggestedTransfer[] = [];
-  let creditorIndex = 0;
-  let debtorIndex = 0;
-
-  while (creditorIndex < creditors.length && debtorIndex < debtors.length) {
-    const creditor = creditors[creditorIndex];
-    const debtor = debtors[debtorIndex];
-    const amountPaise = Math.min(creditor.amountPaise, debtor.amountPaise);
-
-    if (amountPaise > 0) {
-      suggestedTransfers.push({
-        fromUserId: debtor.userId,
-        fromDisplayName: debtor.displayName,
-        toUserId: creditor.userId,
-        toDisplayName: creditor.displayName,
-        amountPaise,
-        currency: 'INR',
-      });
-    }
-
-    creditor.amountPaise -= amountPaise;
-    debtor.amountPaise -= amountPaise;
-
-    if (creditor.amountPaise === 0) creditorIndex += 1;
-    if (debtor.amountPaise === 0) debtorIndex += 1;
-  }
-
-  return suggestedTransfers;
+  const names = new Map(accounting.balances.map((balance) => [balance.userId, balance.displayName]));
+  return accounting.debts.map((debt) => ({
+    fromUserId: debt.fromUserId,
+    fromDisplayName: names.get(debt.fromUserId),
+    toUserId: debt.toUserId,
+    toDisplayName: names.get(debt.toUserId),
+    amountPaise: debt.amountPaise,
+    currency: 'INR' as const,
+  }));
 }
 
 export function findSuggestedTransfer(

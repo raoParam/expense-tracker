@@ -88,8 +88,8 @@ export const SettlementService = {
     }
 
     // The client may only request the current canonical suggested transfer.
-    // This is derived from all room net balances, never from a client-supplied
-    // or separately calculated historical debt.
+    // This is the pair's outstanding debt derived from confirmed expenses and
+    // verified settlements, never a client-supplied amount.
     const suggestedTransfer = await BalanceService.getSuggestedTransfer(
       callerId,
       room._id.toString(),
@@ -99,7 +99,7 @@ export const SettlementService = {
 
     if (!suggestedTransfer) {
       throw new AppError(
-        'You do not have an outstanding net-balance transfer to this member',
+        'You do not owe this member anything right now',
         400,
         'NO_OUTSTANDING_NET_TRANSFER'
       );
@@ -107,7 +107,7 @@ export const SettlementService = {
 
     if (input.amountPaise !== suggestedTransfer.amountPaise) {
       throw new AppError(
-        `Settlement must match the current suggested net-balance transfer of ₹${(
+        `Settlement must match the amount you currently owe this member: ₹${(
           suggestedTransfer.amountPaise / 100
         ).toFixed(2)} (${suggestedTransfer.amountPaise} paise)`,
         400,
@@ -261,7 +261,7 @@ export const SettlementService = {
     );
     if (!currentTransfer || currentTransfer.amountPaise !== settlement.amountPaise) {
       throw new AppError(
-        'The outstanding net-balance transfer has changed or been settled already',
+        'The amount owed between these members has changed or been settled already',
         409,
         'INVALID_SETTLEMENT_STATE'
       );

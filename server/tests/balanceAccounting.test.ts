@@ -12,7 +12,7 @@ jest.mock('../src/models/Expense');
 jest.mock('../src/models/Settlement');
 jest.mock('../src/models/Room');
 
-describe('canonical shared-room net-balance accounting', () => {
+describe('canonical shared-room accounting', () => {
   const roomId = '507f1f77bcf86cd799439011';
   const roomObjectId = new mongoose.Types.ObjectId(roomId);
   const members = [
@@ -76,12 +76,12 @@ describe('canonical shared-room net-balance accounting', () => {
     expect(Array.from(byUser.values()).reduce((sum, amount) => sum + amount, 0)).toBe(0);
   });
 
-  test('generates ZENO → Prince ₹40 and ZENO → Param ₹10 from those balances', async () => {
+  test('suggests the netted pair debts: ZENO → Prince ₹50 and Prince → Param ₹10', async () => {
     const result = await BalanceService.getSuggestedSettlements('zeno', roomId);
 
     expect(result.suggestedTransfers).toEqual([
-      expect.objectContaining({ fromUserId: 'zeno', toUserId: 'prince', amountPaise: 4000 }),
-      expect.objectContaining({ fromUserId: 'zeno', toUserId: 'param', amountPaise: 1000 }),
+      expect.objectContaining({ fromUserId: 'zeno', toUserId: 'prince', amountPaise: 5000 }),
+      expect.objectContaining({ fromUserId: 'prince', toUserId: 'param', amountPaise: 1000 }),
     ]);
   });
 
@@ -89,7 +89,7 @@ describe('canonical shared-room net-balance accounting', () => {
     const transfer = await BalanceService.getSuggestedTransfer('zeno', roomId, 'zeno', 'prince');
     const nonDebtorTransfer = await BalanceService.getSuggestedTransfer('param', roomId, 'param', 'zeno');
 
-    expect(transfer).toEqual(expect.objectContaining({ fromUserId: 'zeno', toUserId: 'prince', amountPaise: 4000 }));
+    expect(transfer).toEqual(expect.objectContaining({ fromUserId: 'zeno', toUserId: 'prince', amountPaise: 5000 }));
     expect(nonDebtorTransfer).toBeUndefined();
   });
 
@@ -118,8 +118,29 @@ describe('canonical shared-room net-balance accounting', () => {
 
     const suggestions = await BalanceService.getSuggestedSettlements('zeno', roomId);
     expect(suggestions.suggestedTransfers).toEqual([
-      expect.objectContaining({ fromUserId: 'zeno', toUserId: 'param', amountPaise: 1000 }),
+      expect.objectContaining({ fromUserId: 'prince', toUserId: 'param', amountPaise: 1000 }),
+      expect.objectContaining({ fromUserId: 'zeno', toUserId: 'prince', amountPaise: 1000 }),
     ]);
+  });
+
+  test('settling one pair never changes any other pair\'s suggested transfer', () => {
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f'];
+    const people = ids.map((userId) => ({ userId, displayName: userId, role: 'member' as const, joinedAt: new Date(), status: 'active' as const }));
+    const owe = (debtor: string, payer: string, amountPaise: number) => ({
+      payerId: payer,
+      amountPaise,
+      participants: [{ userId: debtor, sharePaise: amountPaise }],
+    });
+    const expenses = [owe('a', 'b', 5000), owe('c', 'f', 3000), owe('c', 'e', 2000), owe('d', 'e', 5000)];
+    const key = (t: any) => `${t.fromUserId}>${t.toUserId}:${t.amountPaise}`;
+
+    const before = calculateSuggestedTransfers(calculateRoomAccounting(expenses, [], people)).map(key).sort();
+    const after = calculateSuggestedTransfers(
+      calculateRoomAccounting(expenses, [{ debtorId: 'a', receiverId: 'b', amountPaise: 5000 }], people)
+    ).map(key).sort();
+
+    expect(before).toEqual(['a>b:5000', 'c>e:2000', 'c>f:3000', 'd>e:5000']);
+    expect(after).toEqual(['c>e:2000', 'c>f:3000', 'd>e:5000']);
   });
 
   test('repeated expenses are summed before transfer projection', () => {
