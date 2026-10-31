@@ -73,6 +73,7 @@ const createSettlementSchema = {
         .min(1, 'Amount must be at least 1 paisa')
         .max(9999999999, 'Amount exceeds maximum limit of ₹99,999,999.99')
         .optional(),
+      edgeId: z.string().min(1).optional(),
       idempotencyKey: z.string().max(255, 'Idempotency key cannot exceed 255 characters').optional(),
     })
     .refine((data) => Boolean(data.receiverId || data.recipientId), {

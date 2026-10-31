@@ -10,6 +10,7 @@ export interface MemberBalance {
 }
 
 export interface SuggestedTransfer {
+  edgeId?: string;
   fromUserId: string;
   fromDisplayName?: string;
   toUserId: string;

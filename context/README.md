@@ -7,7 +7,7 @@ The product has two distinct modes:
 1. **Personal expenses** — private expenses stored locally on the user's device in V1.
 2. **Room/group expenses** — shared expenses stored in a cloud backend, acknowledged by participants, and settled through verified repayment records.
 
-The directed graph is a **temporary calculation model**, never the source of truth. The source of truth is the persisted shared expense and settlement history.
+The directed settlement graph is a **persisted execution plan**, never the source of truth. The source of truth remains the persisted shared expense and verified-settlement history; graph persistence and edge transitions make suggested repayment paths stable.
 
 ## How to use these documents
 Read these documents before writing code, in this order:

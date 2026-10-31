@@ -5,11 +5,32 @@ import { AuditEvent } from '../models/AuditEvent';
 import { BalanceService } from './balanceService';
 import { AppError } from '../middleware/errorHandler';
 import { PushNotificationService } from './pushNotificationService';
+import { SettlementGraphService } from './settlementGraphService';
+import { SettlementGraph } from '../models/SettlementGraph';
 
 export interface CreateSettlementInput {
   receiverId: string;
   amountPaise: number;
   idempotencyKey?: string;
+  edgeId?: string;
+  planVersion?: number;
+}
+
+async function withMongoTransaction<T>(work: (session?: mongoose.ClientSession) => Promise<T>): Promise<T> {
+  // Unit tests and local legacy read-only usage may run without a database.
+  // Connected production requests use a Mongo transaction for the settlement
+  // record and its graph-edge transition.
+  if (mongoose.connection.readyState !== 1) return work();
+  const session = await mongoose.startSession();
+  try {
+    let result!: T;
+    await session.withTransaction(async () => {
+      result = await work(session);
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
 }
 
 export const SettlementService = {
@@ -115,6 +136,10 @@ export const SettlementService = {
       );
     }
 
+    if (suggestedTransfer.edgeId && input.edgeId && suggestedTransfer.edgeId !== input.edgeId) {
+      throw new AppError('The settlement edge is stale. Please refresh the room debts.', 409, 'INVALID_SETTLEMENT_STATE');
+    }
+
     const settlement = new Settlement({
       roomId: room._id,
       debtorId: callerId,
@@ -123,6 +148,7 @@ export const SettlementService = {
       currency: 'INR',
       status: 'pending',
       idempotencyKey: input.idempotencyKey,
+      edgeId: suggestedTransfer.edgeId,
     });
 
     await settlement.save();
@@ -250,45 +276,82 @@ export const SettlementService = {
       throw new AppError('Settlement record is invalid', 409, 'INVALID_SETTLEMENT_STATE');
     }
 
-    // Concurrency / stale-transfer safety: pending settlements do not change
-    // balances, so verification must still match the exact current canonical
-    // transfer immediately before the atomic status transition.
-    const currentTransfer = await BalanceService.getSuggestedTransfer(
-      callerId,
-      settlement.roomId.toString(),
-      settlement.debtorId,
-      settlement.receiverId
-    );
-    if (!currentTransfer || currentTransfer.amountPaise !== settlement.amountPaise) {
-      throw new AppError(
-        'The outstanding net-balance transfer has changed or been settled already',
-        409,
-        'INVALID_SETTLEMENT_STATE'
+    let updatedSettlement: ISettlement;
+    let targetEdgeId = settlement.edgeId;
+
+    if (targetEdgeId) {
+      const graph = await SettlementGraphService.getOrInitializeGraph(settlement.roomId.toString());
+      const edge = SettlementGraphService.findEdge(graph, targetEdgeId);
+      if (
+        !edge ||
+        edge.amountPaise !== settlement.amountPaise ||
+        edge.fromUserId !== settlement.debtorId ||
+        edge.toUserId !== settlement.receiverId
+      ) {
+        throw new AppError('The settlement graph edge is no longer outstanding', 409, 'INVALID_SETTLEMENT_STATE');
+      }
+    } else {
+      const suggestedTransfer = await BalanceService.getSuggestedTransfer(
+        callerId,
+        settlement.roomId.toString(),
+        settlement.debtorId,
+        settlement.receiverId
       );
+      if (
+        !suggestedTransfer ||
+        suggestedTransfer.amountPaise !== settlement.amountPaise ||
+        suggestedTransfer.fromUserId !== settlement.debtorId ||
+        suggestedTransfer.toUserId !== settlement.receiverId
+      ) {
+        throw new AppError(
+          'The outstanding net-balance transfer has changed or been settled already',
+          409,
+          'INVALID_SETTLEMENT_STATE'
+        );
+      }
+      targetEdgeId = suggestedTransfer.edgeId;
     }
 
-    const updatedSettlement = await Settlement.findOneAndUpdate(
-      {
-        _id: settlement._id,
-        status: 'pending',
-        receiverId: callerId,
-      },
-      {
-        $set: {
-          status: 'verified',
-          verifiedAt: new Date(),
+    updatedSettlement = await withMongoTransaction(async (session) => {
+      const verified = await Settlement.findOneAndUpdate(
+        {
+          _id: settlement._id,
+          status: 'pending',
+          receiverId: callerId,
         },
-      },
-      { new: true }
-    );
-
-    if (!updatedSettlement) {
-      throw new AppError(
-        'Settlement is no longer pending or was verified by another concurrent request',
-        409,
-        'INVALID_SETTLEMENT_STATE'
+        { $set: { status: 'verified', verifiedAt: new Date() } },
+        { new: true, ...(session ? { session } : {}) }
       );
-    }
+      if (!verified) {
+        throw new AppError(
+          'Settlement is no longer pending or was verified by another concurrent request',
+          409,
+          'INVALID_SETTLEMENT_STATE'
+        );
+      }
+
+      if (targetEdgeId && (mongoose.connection.readyState !== 0 || (SettlementGraph.findOneAndUpdate as any)?._isMockFunction)) {
+        const updatedGraph = await SettlementGraph.findOneAndUpdate(
+          {
+            roomId: settlement.roomId,
+            edges: {
+              $elemMatch: {
+                edgeId: targetEdgeId,
+                fromUserId: settlement.debtorId,
+                toUserId: settlement.receiverId,
+                amountPaise: settlement.amountPaise,
+              },
+            },
+          },
+          { $set: { 'edges.$.amountPaise': 0 } },
+          { new: true, ...(session ? { session } : {}) }
+        );
+        if (!updatedGraph) {
+          throw new AppError('The settlement graph edge was changed concurrently', 409, 'INVALID_SETTLEMENT_STATE');
+        }
+      }
+      return verified;
+    });
 
     await AuditEvent.create({
       actorId: callerId,

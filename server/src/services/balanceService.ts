@@ -7,13 +7,14 @@ import {
   AccountingBalance,
   AccountingResult,
   calculateRoomAccounting,
-  calculateSuggestedTransfers,
-  findSuggestedTransfer,
   SuggestedTransfer as AccountingSuggestedTransfer,
 } from './roomAccounting';
+import { SettlementGraphService } from './settlementGraphService';
 
 export type MemberBalance = AccountingBalance;
-export type SuggestedTransfer = AccountingSuggestedTransfer;
+export type SuggestedTransfer = AccountingSuggestedTransfer & {
+  edgeId?: string;
+};
 
 export interface RoomBalancesResult {
   roomId: string;
@@ -112,14 +113,22 @@ export const BalanceService = {
 
   /**
    * Return the one transfer projection used by the UI and settlement writes.
-   * It is recalculated from the database on every call.
+   * It reads the newest persisted plan; canonical balances remain available
+   * independently for the balance endpoint.
    */
   async getSuggestedSettlements(callerId: string, roomId: string): Promise<SuggestedSettlementsResult> {
     const loaded = await loadCanonicalAccounting(callerId, roomId);
-    return {
-      roomId: loaded.room._id.toString(),
-      suggestedTransfers: calculateSuggestedTransfers(loaded.accounting),
-    };
+    const graph = await SettlementGraphService.getOrInitializeGraph(roomId);
+    if (graph) {
+      return {
+        roomId: loaded.room._id.toString(),
+        suggestedTransfers: SettlementGraphService.toSuggestedTransfers(
+          graph,
+          loaded.room.members
+        ),
+      };
+    }
+    return { roomId: loaded.room._id.toString(), suggestedTransfers: [] };
   },
 
   async getSuggestedTransfer(
@@ -129,6 +138,27 @@ export const BalanceService = {
     toUserId: string
   ): Promise<SuggestedTransfer | undefined> {
     const loaded = await loadCanonicalAccounting(callerId, roomId);
-    return findSuggestedTransfer(loaded.accounting, fromUserId, toUserId);
+    const graph = await SettlementGraphService.getOrInitializeGraph(roomId);
+    if (graph) {
+      const edge = graph.edges.find(
+        (candidate) =>
+          candidate.amountPaise > 0 &&
+          candidate.fromUserId === fromUserId &&
+          candidate.toUserId === toUserId
+      );
+      if (!edge) return undefined;
+      const fromMember = loaded.room.members.find((member: any) => member.userId === fromUserId);
+      const toMember = loaded.room.members.find((member: any) => member.userId === toUserId);
+      return {
+        edgeId: edge.edgeId,
+        fromUserId,
+        fromDisplayName: fromMember?.displayName,
+        toUserId,
+        toDisplayName: toMember?.displayName,
+        amountPaise: edge.amountPaise,
+        currency: 'INR',
+      };
+    }
+    return undefined;
   },
 };

@@ -17,6 +17,7 @@ export interface ISettlement extends Document {
   verifiedAt?: Date;
   rejectedAt?: Date;
   cancelledAt?: Date;
+  edgeId?: string;
 }
 
 const SettlementSchema = new Schema<ISettlement>(
@@ -42,6 +43,7 @@ const SettlementSchema = new Schema<ISettlement>(
     verifiedAt: { type: Date },
     rejectedAt: { type: Date },
     cancelledAt: { type: Date },
+    edgeId: { type: String, index: true },
   },
   {
     timestamps: true,

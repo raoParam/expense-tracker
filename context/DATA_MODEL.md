@@ -67,6 +67,15 @@ For confirmed expenses, use immutable records plus explicit linked correction/re
 - idempotency key/reference
 - optional relation to suggested debt/payment plan (not required to tie a payment to one expense)
 
+## 7. Settlement graph
+- Every room has one persistent `SettlementGraph` stored in MongoDB (`roomId` unique index).
+- `vertices` represent room members using stable user IDs.
+- `edges` represent directed payments: debtor -> creditor, with stable `edgeId` and integer-paise `amountPaise`.
+- When a room is created, its graph is initialized with all room members as vertices and an empty edges array.
+- A new shared expense becoming `confirmed` is the ONLY event that recalculates or optimizes the graph.
+- When a settlement is verified, only its matching edge's `amountPaise` is set to 0. The edge is not deleted, other edges are unchanged, and the optimizer is never called.
+- No parallel settlement plan systems or graph versions are maintained.
+
 A settlement records an actual repayment claim and its verification, not a graph edge.
 
 ## 7. User restriction

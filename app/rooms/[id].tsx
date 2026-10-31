@@ -56,6 +56,7 @@ interface SettleUpTarget {
   receiverId: string;
   receiverDisplayName: string;
   amountPaise: number;
+  edgeId?: string;
 }
 
 export default function RoomDetailScreen() {
@@ -314,6 +315,7 @@ export default function RoomDetailScreen() {
       await SettlementClientService.createSettlement(room._id, {
         receiverId: settleUpTarget.receiverId,
         amountPaise: settleUpTarget.amountPaise,
+        edgeId: settleUpTarget.edgeId,
         idempotencyKey: `settle_${room._id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       });
       setSettleUpTarget(null);
@@ -761,6 +763,7 @@ export default function RoomDetailScreen() {
                           receiverId: transfer.toUserId,
                           receiverDisplayName: receiverName,
                           amountPaise: transfer.amountPaise,
+                          edgeId: transfer.edgeId,
                         })
                       }
                       style={styles.settleUpBtn}

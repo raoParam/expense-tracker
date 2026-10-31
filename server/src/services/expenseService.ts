@@ -6,6 +6,7 @@ import { AuditEvent } from '../models/AuditEvent';
 import { AppError } from '../middleware/errorHandler';
 import { calculateShares, SplitInputItem } from './splitCalculator';
 import { PushNotificationService } from './pushNotificationService';
+import { SettlementGraphService } from './settlementGraphService';
 
 export interface CreateExpenseDTO {
   roomId: string;
@@ -336,6 +337,13 @@ export const ExpenseService = {
             allAcknowledged: true,
           },
         });
+
+        // A confirmed expense is the ONLY event allowed to rebuild settlement
+        // topology. The graph service reads the authoritative confirmed
+        // expense/verified-settlement ledger and updates the room's persistent graph.
+        await SettlementGraphService.updateGraphForConfirmedExpense(
+          confirmedExpense.roomId.toString()
+        );
 
         // Trigger push notification to payer that expense confirmed
         Room.findById(confirmedExpense.roomId)

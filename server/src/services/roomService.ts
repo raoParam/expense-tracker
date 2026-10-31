@@ -9,6 +9,7 @@ import { AuditEvent } from '../models/AuditEvent';
 import { AuthenticatedUser } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { PushNotificationService } from './pushNotificationService';
+import { SettlementGraphService } from './settlementGraphService';
 
 // Generate a human-friendly 6-character uppercase alphanumeric code
 export function generateInviteCode(): string {
@@ -113,6 +114,12 @@ export class RoomService {
     });
 
     await room.save();
+
+    // Initialize persistent settlement graph with room members as vertices and an empty edges array
+    await SettlementGraphService.initializeGraphForRoom(
+      room._id.toString(),
+      room.members.map((m) => m.userId)
+    );
 
     // Record audit event
     await AuditEvent.create({
@@ -390,6 +397,7 @@ export class RoomService {
 
     await RoomService.repairMemberDisplayNames(room, user);
     await room.save();
+    await SettlementGraphService.addVertexIfMissing(room._id.toString(), user.uid);
 
     // Mark invitation as accepted
     invitation.status = 'accepted';

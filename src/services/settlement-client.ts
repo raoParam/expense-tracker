@@ -17,11 +17,13 @@ export interface SettlementModel {
   verifiedAt?: string;
   rejectedAt?: string;
   cancelledAt?: string;
+  edgeId?: string;
 }
 
 export interface CreateSettlementPayload {
   receiverId: string;
   amountPaise: number;
+  edgeId?: string;
   idempotencyKey?: string;
 }
 

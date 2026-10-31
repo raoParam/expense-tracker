@@ -46,13 +46,13 @@ Authentication is handled via Firebase Authentication:
 
 ## 6. Balances
 - `GET /rooms/:roomId/balances` — fresh authoritative net balances from confirmed expenses and verified settlements
-- `GET /rooms/:roomId/suggested-settlements` — deterministic transfer projection generated from those exact balances; these transfers are also the only valid Settle Up requests
+- `GET /rooms/:roomId/suggested-settlements` — room's persistent settlement graph; each transfer includes `edgeId`. Reads stored graph, never dynamically optimizes.
 - `GET /rooms/:roomId/bilateral-debts` — deprecated compatibility alias for the same suggested transfers; no separate bilateral calculation is maintained
 
 ## 7. Settlements
 - `GET /rooms/:roomId/settlements` — authorized settlement history
-- `POST /rooms/:roomId/settlements` — create verification request for the authenticated debtor's current suggested transfer; idempotency key required
-- `POST /settlements/:settlementId/verify` — receiver only; version/state validation
+- `POST /rooms/:roomId/settlements` — create verification request for the authenticated debtor's current persisted edge (`edgeId` accepted); idempotency key required
+- `POST /settlements/:settlementId/verify` — receiver only; atomically verifies the settlement and zeroes only its persisted edge; does not rebuild graph or invoke optimizer
 - `POST /settlements/:settlementId/reject` — receiver only; mandatory reason
 
 ## 8. Notifications
